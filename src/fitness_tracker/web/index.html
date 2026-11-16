@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0b0916" />
+    <title>Blaze Athletics · Your fitness journal</title>
+    <link rel="icon" href="/assets/icon.svg?v=athletics" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/workout-history.js" defer></script>
+    <script src="/dialog-lifecycle.js" defer></script>
+    <script src="/goals.js" defer></script>
+    <script src="/body-map.js" defer></script>
+    <script src="/dashboard.js" defer></script>
+    <script src="/date-picker.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="app-header">
+        <a class="brand" href="#overview"
+          ><img
+            class="brand-icon"
+            src="/assets/icon.svg?v=athletics"
+            alt="Blaze Athletics flame"
+          /><span class="brand-wordmark"
+            ><span>Blaze Athletics</span
+            ><small class="brand-tagline">Keep The Fire Going</small></span
+          ></a
+        >
+        <nav id="nav" aria-label="Main navigation"></nav>
+        <button
+          class="header-settings"
+          data-page="settings"
+          aria-label="Settings & connections"
+        >
+          ⚙
+        </button>
+      </header>
+      <main>
+        <header class="topbar">
+          <div>
+            <span class="breadcrumb">Your universe</span
+            ><span class="slash">/</span><span id="page-label">Overview</span>
+          </div>
+          <div class="top-right">
+            <span id="demo-badge"></span
+            ><span class="local-indicator"
+              ><span class="status-dot"></span>LOCAL ON YOUR COMPUTER</span
+            ><span id="header-date"></span
+            ><span class="avatar" id="avatar">Y</span>
+          </div>
+        </header>
+        <div class="content" id="content">
+          <div class="loading">Getting your journal ready…</div>
+        </div>
+        <footer>
+          BLAZE ATHLETICS <span>Find your rhythm. Build your future.</span>
+        </footer>
+      </main>
+    </div>
+    <dialog id="modal"><div id="modal-content"></div></dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

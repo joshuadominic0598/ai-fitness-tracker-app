@@ -1,0 +1,36 @@
+[
+  {
+    "id": "Wide_Grip_Neutral_Pull_Up",
+    "name": "Wide-Grip Neutral Pull-Up",
+    "aliases": [
+      "Wide Parallel-Grip Pull-Up",
+      "Wide Grip Neutral Pullup",
+      "Wide Parallel Grip Pullup",
+      "Wide V-Bar Pull-Up",
+      "Wide V Bar Pull Up",
+      "Wide Semi-Neutral Grip Pull-Up",
+      "Wide Semi Supinated Grip Pullup"
+    ],
+    "force": "pull",
+    "level": "intermediate",
+    "mechanic": "compound",
+    "equipment": "body only",
+    "primaryMuscles": ["lats"],
+    "secondaryMuscles": ["biceps", "middle back", "forearms"],
+    "instructions": [
+      "Use a pull-up station with fixed parallel or angled neutral-grip handles spaced wider than shoulder width. Face your palms toward each other, or slightly toward you with semi-neutral handles.",
+      "Grip both handles and begin in a controlled hang with your torso steady. Pull yourself upward without swinging, using a comfortable range of motion.",
+      "Lower yourself under control and repeat for the repetitions you complete. Record zero added kg for bodyweight repetitions; record added weight separately when used.",
+      "This is the wide neutral/parallel-grip variation, distinct from a wide overhand pull-up and the close-grip V-bar pull-up. Use equipment intended for pull-ups rather than improvising an unsecured cable attachment."
+    ],
+    "category": "strength",
+    "images": ["Wide_Grip_Neutral_Pull_Up/0.webp"],
+    "photoNote": "Reference photo: a standard neutral-grip V-bar pull-up. This variation uses wider fixed neutral handles; the reference photo does not show that wider spacing.",
+    "referenceVideo": "https://www.youtube.com/shorts/AVrTxMEgSBE",
+    "sources": [
+      "https://www.pullup-dip.com/blogs/training-camp/pull-up-grip-position",
+      "https://repfitness.com/blogs/training/11-different-hand-positions-on-the-pull-up-bar-and-the-muscle-groups-they-target"
+    ],
+    "origin": "Form & Fuel custom catalog addition; reference photo from Free Exercise DB V-Bar_Pullup (Unlicense)"
+  }
+]

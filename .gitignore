@@ -1,0 +1,19 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+data/
+.demo/
+.test-data/
+.env
+*.egg-info/
+build/
+dist/
+node_modules/
+playwright-report/
+
+.venv-agent/
+# Local model evaluation reports are generated, not release assets.
+docs/local-model-evaluation.json

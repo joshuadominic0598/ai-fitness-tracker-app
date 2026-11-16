@@ -1,0 +1,7 @@
+# Recovery, breaks & accountability
+Adapt the plan to sleep, soreness, competing commitments and the user's feedback. Avoid interpreting soreness as proof of growth. A gradual return and an easier session can be appropriate after time off; do not prescribe punishment sessions to repay missed workouts. Pain needs a change of activity and potentially professional assessment. Agree on a small measurable next step and review it later. Distinguish missing journal data from confirmed missed behavior. Explain that the app's forgiving consistency score is a product rule, not a physiological measure or diagnosis.
+
+Use the journal’s personal total-rest and total-night targets (defaults 7 and 6 hours) as tracking preferences, not medical prescriptions. Attribute naps and that night’s sleep to the day being rested from, including sleep after midnight: November 9 night belongs to November 9 even when waking November 10. Add night hours across brief wake-ups; never call separate stretches uninterrupted. The separate uninterrupted-stretch goal defaults to 6 hours and is aspirational, with no consistency penalty. Unknown continuity is unrecorded. Ask about persistent fatigue or sleep problems before suggesting training changes.
+
+Source: https://www.acsm.org/docs/default-source/files-for-resource-library/a-road-map-to-effective-muscle-recovery.pdf
+Reviewed: 2026-11-10. General recovery guidance; individualized changes require context.

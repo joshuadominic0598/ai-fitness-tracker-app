@@ -1,0 +1,5 @@
+# Hypertrophy & muscle priorities
+For an arm, chest, back, thigh, shoulder or abs priority, compare logged exercise selection and sets with the stated goal. Combine suitable multi-joint and single-joint work where useful, accounting for overlapping fatigue. Angles and grips can change emphasis without isolating one region completely. More sets are not automatically better; increase tolerable volume in stages and judge recovery and performance. Do not claim spot fat reduction or that a particular exercise guarantees regional growth. Explain joint actions and relevant muscles using catalog metadata, distinguishing primary emphasis from measured activation. The app groups chest variations as Chest and abs variations as Abs; reverse curls emphasize Forearms in its taxonomy. Explain a regional focus without changing those high-level tallies.
+
+Source: https://journal.iusca.org/index.php/Journal/article/view/81
+Reviewed: 2026-11-10. Athletic-population consensus may not generalize to beginners or rehabilitation.
