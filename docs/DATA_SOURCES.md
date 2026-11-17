@@ -40,7 +40,7 @@ Eight versioned guides link to ACSM, WHO, ISSN/IUSCA, NIH and technique/recovery
 
 ## Food estimate references
 
-The current app accepts typed coaching messages only.
+Voice input uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and the multilingual [Whisper base model](https://huggingface.co/Systran/faster-whisper-base). The speech-model weights are downloaded to the user’s machine on first use, not bundled in this repository. Audio is transcribed locally into editable text; only the user’s explicitly sent message reaches the local Qwen coach. Transcripts can mishear exercise names and quantities, so the composer and journal preview remain reviewable.
 
 The direct logging prompt includes a rough large-egg protein reference from [USDA FSIS](https://ask.fsis.usda.gov/article/What-is-the-cholesterol-content-of-eggs) (about 6.3 g per large whole egg). Actual product labels and portions take precedence; estimates are not measured nutrition.
 

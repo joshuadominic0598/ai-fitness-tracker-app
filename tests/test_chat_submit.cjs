@@ -17,11 +17,12 @@ const code = source.slice(
     prevented = false,
     resolve;
   const ctx = {
+    VoiceInput: require("../src/fitness_tracker/web/voice-input.js"),
     state: { coach_consent: { accepted: false }, chat_status: { busy: false } },
     chatResearchMode: false,
     chatLoggingKind: null,
     chatRevisionId: null,
-    voiceInput: { isBusy: () => false },
+    voiceInput: { isBusy: () => false, cancel: () => {} },
     chatBusy: false,
     coachModelBusy: false,
     pendingCoachConnection: () => false,

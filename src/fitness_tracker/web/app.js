@@ -1114,6 +1114,7 @@ function syncChatThread(forceScroll = false) {
     submit.innerHTML = chatIsBusy() ? "Generating…" : "Send " + icon("arrow");
   }
   setCoachControlsDisabled(chatIsBusy() || coachModelBusy);
+  updateChatVoiceControls();
 }
 async function refreshChatSnapshot() {
   const snapshot = await api("chat-state");
@@ -1372,9 +1373,33 @@ const coachStarters = [
 function coachPromptCards() {
   return `<div class="coach-starters" role="group" aria-label="Start a conversation">${coachStarters.map((starter) => `<button type="button" class="coach-starter" data-prompt="${esc(starter.prompt)}">${icon(starter.icon)}<span><strong>${esc(starter.title)}</strong><small>${esc(starter.hint)}</small></span></button>`).join("")}</div>`;
 }
-function chatVoiceControls() { return ""; }
+const voiceInput = VoiceInput.create({
+  transcribe: (data) => api("transcribe", data),
+  onTranscript(text) {
+    const input = $("#chat-input");
+    if (!input) return false;
+    const combined = input.value + (input.value && !/\s$/.test(input.value) ? "\n" : "") + text;
+    if (combined.length > input.maxLength) return false;
+    input.value = combined;
+    chatComposerDraft = combined;
+    input.focus({ preventScroll: true });
+    return true;
+  },
+  onChange: updateChatVoiceControls,
+});
+function chatVoiceControls() {
+  const { phase, message, pendingText } = voiceInput.state();
+  const busy = voiceInput.isBusy(), blocked = chatIsBusy() || coachModelBusy;
+  return `<div class="chat-voice-controls"><div class="chat-voice-actions"><button type="button" class="btn secondary" data-action="voice-record" ${busy || blocked ? "disabled" : ""}>Record audio</button><button type="button" class="btn secondary" data-action="voice-upload" ${busy || blocked ? "disabled" : ""}>Upload audio</button><input id="chat-audio-file" type="file" accept="audio/*,.webm,.mp3,.m4a,.wav,.ogg,.flac,.aac,.aiff,.aif" hidden>${phase === "recording" ? `<button type="button" class="btn" data-action="voice-stop">Stop & transcribe</button>` : ""}${busy || pendingText ? `<button type="button" class="link" data-action="voice-cancel">Cancel audio</button>` : ""}<span class="small muted">Local speech to text</span></div><p class="${phase === "error" ? "error" : "muted"}" role="status" aria-live="polite">${esc(message)}</p>${pendingText ? `<label class="small">Transcript<textarea readonly rows="3">${esc(pendingText)}</textarea></label><button type="button" class="btn secondary" data-action="voice-insert">Insert transcript</button>` : ""}</div>`;
+}
+function updateChatVoiceControls() {
+  const controls = $("#chat-voice-controls");
+  if (controls) controls.innerHTML = chatVoiceControls();
+  const submit = $("#chat-form [type=submit]");
+  if (submit) submit.disabled = chatIsBusy() || coachModelBusy || voiceInput.isBusy();
+}
 function coach() {
-  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}${coachPromptCards()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div>${state.coach_consent?.accepted ? `<div id="chat-voice-controls">${chatVoiceControls()}</div><form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="2" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div></div>`;
+  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}${coachPromptCards()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><div id="chat-voice-controls">${chatVoiceControls()}</div><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="2" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div></div>`;
 }
 function goalProgress(key, reference = journalDate) {
   return GoalTracking.progress(
@@ -1607,6 +1632,7 @@ function fitChatViewport() {
 }
 window.addEventListener("resize", fitChatViewport);
 function render() {
+  voiceInput.cancel();
   page = location.hash.slice(1) || "overview";
   if (["journal", "workouts", "nutrition"].includes(page)) {
     page = "track";
@@ -1984,6 +2010,7 @@ async function saveConnection(service) {
 }
 
 function prepareCoachMessage(message) {
+  voiceInput.cancel();
   chatComposerDraft = message;
   chatLoggingKind = "any";
   chatRevisionId = null;
@@ -2001,6 +2028,10 @@ async function sendChat(event, approvalId = null) {
   if (chatIsBusy()) return;
   const input = $("#chat-input"),
     error = $("#chat-error");
+  if (voiceInput.isBusy()) {
+    error.textContent = "Stop or cancel audio and review the transcript before sending.";
+    return;
+  }
   if (coachModelBusy) {
     error.textContent = "Wait for the connection change or test to finish.";
     return;
@@ -2110,6 +2141,21 @@ async function sendChat(event, approvalId = null) {
 async function action(name, el) {
   const id = el.dataset.id;
   switch (name) {
+    case "voice-record":
+      if (!chatIsBusy() && !coachModelBusy) await voiceInput.record();
+      break;
+    case "voice-stop":
+      voiceInput.stop();
+      break;
+    case "voice-cancel":
+      voiceInput.cancel();
+      break;
+    case "voice-insert":
+      voiceInput.insert();
+      break;
+    case "voice-upload":
+      $("#chat-audio-file")?.click();
+      break;
     case "intake-period":
       intakePeriod = el.dataset.period === "weekly" ? "weekly" : "daily";
       $("#intake-panel").innerHTML = intakePanel();
@@ -2120,6 +2166,7 @@ async function action(name, el) {
         toast("Wait for the coach to finish before starting a new chat.");
         break;
       }
+      voiceInput.cancel();
       el.disabled = true;
       try {
         await api("new-chat", {});
@@ -2718,6 +2765,12 @@ document.addEventListener("input", (event) => {
     $("#picker-results").innerHTML = pickerResults(el.value);
 });
 document.addEventListener("change", (event) => {
+  if (event.target.id === "chat-audio-file") {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!chatIsBusy() && !coachModelBusy) void voiceInput.upload(file);
+    return;
+  }
   if (event.target.classList?.contains("review-date")) {
     if (event.target.checkValidity()) {
       reviewDate = event.target.value;
@@ -2995,6 +3048,7 @@ document.addEventListener("submit", async (event) => {
     if (form.id === "coach-model-form") updateCoachConnectionState();
   }
 });
+window.addEventListener("pagehide", () => voiceInput.cancel());
 window.addEventListener("hashchange", () => {
   if (state) {
     render();

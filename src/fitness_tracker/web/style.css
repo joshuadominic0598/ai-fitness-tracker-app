@@ -4788,35 +4788,27 @@ a {
   scroll-margin-top: 110px;
 }
 .chat-voice-controls {
-  flex-shrink: 0;
-  padding: 8px 18px;
-  border-top: 1px solid var(--line);
-  font-size: 11px;
-  max-height: 220px;
-  overflow-y: auto;
+  font-size: 12px;
+  margin-bottom: 8px;
 }
-.chat-voice-controls summary {
-  cursor: pointer;
-  color: #b79bd9;
+.chat-voice-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .chat-voice-controls p {
-  margin: 8px 0;
-  line-height: 1.6;
+  margin: 6px 0;
+  line-height: 1.4;
 }
 .chat-voice-controls .btn {
-  font-size: 11px;
-  padding: 8px 10px;
+  font-size: 12px;
+  padding: 7px 11px;
 }
-.audio-file-label {
-  font-size: 11px;
-  color: #c1aada;
+.chat-voice-controls textarea {
+  width: 100%;
 }
-.audio-file-label input {
-  max-width: 220px;
-  display: block;
-  font-size: 10px;
-  margin-top: 5px;
-}
+
 
 .dashboard-page .topbar,
 .tracking-page .topbar {

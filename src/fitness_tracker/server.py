@@ -14,6 +14,7 @@ from pathlib import Path
 from .coach import Coach, Connections, research, videos
 from .coach_skills import skill_catalog
 from .store import CATALOG, Store, insights
+from .transcription import LocalTranscriber
 
 WEB = Path(__file__).parent / "web"
 
@@ -114,6 +115,7 @@ class AppServer(ThreadingHTTPServer):
         self.store = Store(directory)
         self.connections = Connections(self.store.directory)
         self.coach = Coach(self.store, self.connections)
+        self.transcriber = LocalTranscriber()
         self.token = secrets.token_urlsafe(32)
         self.demo = demo
         if demo:
@@ -250,7 +252,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Request must be an object.")
             path = urllib.parse.urlsplit(self.path).path
             store = self.server.store
-            if path == "/api/new-chat":
+            if path == "/api/transcribe":
+                result = self.server.transcriber.transcribe(body)
+            elif path == "/api/new-chat":
                 if not self.server.coach.lock.acquire(blocking=False):
                     raise ValueError("Wait for the coach to finish before starting a new chat.")
                 try:

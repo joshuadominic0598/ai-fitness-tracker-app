@@ -29,6 +29,7 @@ const code = source.slice(
     "#coach-quota-info": {},
   };
   const ctx = {
+    VoiceInput: require("../src/fitness_tracker/web/voice-input.js"),
     chatBusy: false,
     chatIsBusy: () => ctx.chatBusy,
     state: {

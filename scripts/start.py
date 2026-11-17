@@ -39,7 +39,7 @@ def main():
         print("Preparing Blaze Athletics for your computer…", flush=True)
         subprocess.run([sys.executable, "-m", "venv", str(runtime)], check=True)
     ready = subprocess.run(
-        [str(python), "-c", "import langgraph, tiktoken, ddgs"], capture_output=True
+        [str(python), "-c", "import langgraph, tiktoken, ddgs, faster_whisper"], capture_output=True
     )
     if ready.returncode:
         print("Installing the app's first-run requirements. This needs internet once.", flush=True)

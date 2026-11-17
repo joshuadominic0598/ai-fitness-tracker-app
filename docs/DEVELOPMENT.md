@@ -10,7 +10,7 @@ cd ai-fitness-tracker-app
 python3 scripts/start.py
 ```
 
-`start.py` creates `.venv-agent` and installs the project dependencies on first use. On Windows, use `py -3 scripts/start.py`. The Mac and Windows launchers call the same bootstrap. Python, Git and Ollama are installed separately; the bootstrap does not change system settings or download a model automatically.
+`start.py` creates `.venv-agent` and installs the project dependencies on first use. On Windows, use `py -3 scripts/start.py`. The Mac and Windows launchers call the same bootstrap. Python, Git and Ollama are installed separately; the bootstrap does not change system settings or download the Qwen model automatically.
 
 Open Ollama and run `ollama pull qwen3:8b` for coaching. If Ollama isn't running, start the Ollama desktop app or run `ollama serve`. The app accepts only loopback Ollama addresses and local Qwen models. Qwen3 8B is the default; a smaller installed Qwen model can be selected in Settings on a computer with less memory. There is no automatic model or remote fallback.
 
@@ -23,6 +23,18 @@ python3 -m venv .venv-agent
 ```
 
 Use `.venv-agent\Scripts\python.exe` on Windows. For an isolated sample journal, append `--demo`. For isolated development or tests, pass `--data-dir /path/to/temporary/journal --port 8890`. Never point synthetic tests at a personal journal.
+
+## Voice input
+
+Record or upload audio in the AI coach composer, including when opened from Track → Log using AI. The transcript is appended to the current message, remains editable, and is never sent automatically. Existing text and edits made during transcription are preserved. Stop or cancel audio before sending; leaving the screen or starting a new chat discards any late result.
+
+Speech recognition uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper), with multilingual Whisper `base` on the CPU in INT8 mode. It is installed by the normal bootstrap. There is no API key, cloud inference, browser speech service, GPU requirement or separate FFmpeg installation. Qwen remains the coaching agent.
+
+The first transcription downloads the speech model from Hugging Face; the interface explains this wait. Later launches try the local model cache first, so cached transcription works offline. A failed download leaves the typed message unchanged and can be retried. Model weights use the standard Hugging Face cache outside the repository.
+
+Clips are limited to 2 minutes and 8 MB. Microphone recording requires browser permission; upload works without microphone access. WAV, MP3, M4A, OGG, WebM, FLAC and other formats supported by bundled PyAV can be decoded. Long audio is rejected before model inference, including compressed files. Recordings and decoded samples stay in memory during processing; they are not written to journal storage or sent to Ollama. Cancel discards the client result; a transcription already running on the local server may finish before another can start.
+
+The token-protected `/api/transcribe` endpoint only returns transcript text and model/language metadata. Unit and HTTP tests check bounds, errors, cache loading, concurrent work and journal isolation; JavaScript tests cover recording, permission denial, cancellation and editable insertion. A real-model smoke test requires the downloaded weights and is separate from CI.
 
 ## Local data and backups
 

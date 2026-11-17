@@ -40,6 +40,36 @@ class HTTPTests(unittest.TestCase):
                 self.post("profile", {}, token, origin)
             self.assertEqual(e.exception.code, 403)
 
+    def test_transcription_is_session_protected_and_never_sends_or_saves(self):
+        from unittest.mock import patch
+
+        before = (
+            self.server.store.entries(),
+            self.server.store.messages(),
+            self.server.store.drafts(),
+        )
+        with (
+            patch.object(
+                self.server.transcriber, "transcribe", return_value={"text": "Eight pushups"}
+            ) as transcribe,
+            patch.object(self.server.coach, "chat") as chat,
+        ):
+            for token, origin in [(False, None), (True, "https://other.example")]:
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    self.post("transcribe", {"audio": "YWJj"}, token, origin)
+                self.assertEqual(caught.exception.code, 403)
+            transcribe.assert_not_called()
+            with self.post("transcribe", {"audio": "YWJj"}) as response:
+                self.assertEqual(json.load(response), {"text": "Eight pushups"})
+            chat.assert_not_called()
+        self.assertEqual(
+            (self.server.store.entries(), self.server.store.messages(), self.server.store.drafts()),
+            before,
+        )
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.post("transcribe", {"audio": "invalid"})
+        self.assertEqual(caught.exception.code, 400)
+
     def test_new_chat_stays_empty_after_reload_and_preserves_journal(self):
         store = self.server.store
         entry = store.save(

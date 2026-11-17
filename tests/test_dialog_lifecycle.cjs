@@ -127,6 +127,7 @@ class NativeDialog {
   const elements = { "#page-label": {}, "#nav": {}, "#content": {} };
   const context = {
     BodyMap: { bind() {} },
+    voiceInput: { cancel() {} },
     location: { hash: "#overview" },
     document: { body: { classList: { toggle() {} } } },
     pages: { overview: "Overview" },
