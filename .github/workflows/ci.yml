@@ -8,7 +8,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: ['3.10', '3.12']
-    runs-on: ${{ matrix.os }}
+        include:
+          # Spread macOS jobs across both architectures; ARM capacity can be constrained.
+          - os: macos-latest
+            python: '3.10'
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner || matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
