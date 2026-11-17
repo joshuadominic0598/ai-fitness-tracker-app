@@ -128,6 +128,7 @@ class NativeDialog {
   const context = {
     BodyMap: { bind() {} },
     voiceInput: { cancel() {} },
+    resizeChatComposer() {},
     location: { hash: "#overview" },
     document: { body: { classList: { toggle() {} } } },
     pages: { overview: "Overview" },

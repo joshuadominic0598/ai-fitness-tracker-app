@@ -17,7 +17,7 @@ const code = source.slice(
     status = {},
     active = {};
   const form = { elements: [provider, model, custom] };
-  const input = { value: "Keep my unsent meal and portions" };
+  const input = { value: "Keep my unsent meal and portions", style: {}, scrollHeight: 120 };
   const elements = {
     "#coach-model-form": form,
     "#coach-provider": provider,
@@ -29,6 +29,7 @@ const code = source.slice(
     "#coach-quota-info": {},
   };
   const ctx = {
+    resizeChatComposer: () => {},
     VoiceInput: require("../src/fitness_tracker/web/voice-input.js"),
     chatBusy: false,
     chatIsBusy: () => ctx.chatBusy,

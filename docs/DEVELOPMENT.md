@@ -26,13 +26,13 @@ Use `.venv-agent\Scripts\python.exe` on Windows. For an isolated sample journal,
 
 ## Voice input
 
-Record or upload audio in the AI coach composer, including when opened from Track → Log using AI. The transcript is appended to the current message, remains editable, and is never sent automatically. Existing text and edits made during transcription are preserved. Stop or cancel audio before sending; leaving the screen or starting a new chat discards any late result.
+Select the microphone icon beside Send in the AI coach composer, including when opened from Track → Log using AI. The transcript is appended to the current message, remains editable, and is never sent automatically. Existing text and edits made during transcription are preserved. Select the stop icon to transcribe, or cancel audio before sending; leaving the screen or starting a new chat discards any late result.
 
 Speech recognition uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper), with multilingual Whisper `base` on the CPU in INT8 mode. It is installed by the normal bootstrap. There is no API key, cloud inference, browser speech service, GPU requirement or separate FFmpeg installation. Qwen remains the coaching agent.
 
 The first transcription downloads the speech model from Hugging Face; the interface explains this wait. Later launches try the local model cache first, so cached transcription works offline. A failed download leaves the typed message unchanged and can be retried. Model weights use the standard Hugging Face cache outside the repository.
 
-Clips are limited to 2 minutes and 8 MB. Microphone recording requires browser permission; upload works without microphone access. WAV, MP3, M4A, OGG, WebM, FLAC and other formats supported by bundled PyAV can be decoded. Long audio is rejected before model inference, including compressed files. Recordings and decoded samples stay in memory during processing; they are not written to journal storage or sent to Ollama. Cancel discards the client result; a transcription already running on the local server may finish before another can start.
+Recordings are limited to 2 minutes and 8 MB. Microphone recording requires browser permission. There is no file-upload control. The browser chooses a supported recording format, such as WebM/Opus or MP4, which bundled PyAV decodes locally. Long audio is rejected before model inference, including compressed files. Recordings and decoded samples stay in memory during processing; they are not written to journal storage or sent to Ollama. Cancel discards the client result; a transcription already running on the local server may finish before another can start.
 
 The token-protected `/api/transcribe` endpoint only returns transcript text and model/language metadata. Unit and HTTP tests check bounds, errors, cache loading, concurrent work and journal isolation; JavaScript tests cover recording, permission denial, cancellation and editable insertion. A real-model smoke test requires the downloaded weights and is separate from CI.
 
@@ -40,7 +40,7 @@ The token-protected `/api/transcribe` endpoint only returns transcript text and 
 
 Personal records, settings, conversations and pending approvals live in `data/`, which is ignored by Git. Demo mode uses `.demo/`. A fresh clone creates its own empty journal. Settings → Export journal backup exports records, goals, conversations (including archived chats) and pending previews. JSON import is not implemented. For a complete restorable backup, stop the app, copy the whole `data/` folder, and restore it while the server is stopped.
 
-A new chat archives earlier messages and excludes them from model history. Previous pending previews remain accessible in Track. Saving a workout updates that date while preserving other exercises unless explicitly edited. Nothing the agent proposes is saved before approval.
+A new chat archives earlier messages and excludes them from model history. Previous pending previews remain accessible in Track. Approving a newer workout retires older workout-only proposals for that same day; proposals for other dates, plans and mixed log batches are kept. Startup also repairs older journals that retained these superseded workout proposals. Saving a workout updates that date while preserving other exercises unless explicitly edited. Nothing the agent proposes is saved before approval.
 
 Earlier provider settings are migrated to the local configuration: unsupported provider options and credentials are removed from `connections.json`. The default is Qwen3 8B. Public Research remains opt-in and uses public queries with external search/Europe PMC; ordinary inference uses only local Ollama.
 

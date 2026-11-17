@@ -295,6 +295,8 @@ class Store:
             if "baseline" not in {row[1] for row in con.execute("PRAGMA table_info(drafts)")}:
                 con.execute("ALTER TABLE drafts ADD COLUMN baseline TEXT DEFAULT '{}'")
         self._consolidate_workout_days()
+        with self.connect() as con:
+            self._supersede_workout_previews(con)
 
     def _archive_workout(self, con, entry_id, data):
         con.execute(
@@ -691,12 +693,36 @@ class Store:
             )
         return result
 
+    def _supersede_workout_previews(self, con):
+        # One saved workout per day: a later approval replaces earlier workout proposals.
+        # Keep raw proposals for audit, and keep other dates, plans and mixed batches pending.
+        rows = con.execute(
+            "SELECT rowid,id,kind,data,status FROM drafts "
+            "WHERE status IN ('pending','approved') ORDER BY rowid"
+        ).fetchall()
+        approved_days = {}
+        pending = []
+        for order, draft_id, kind, raw, status in rows:
+            data = json.loads(raw)
+            items = data["entries"] if kind == "batch" else [{"kind": kind, "data": data}]
+            if status == "approved":
+                for item in items:
+                    if item["kind"] == "workout":
+                        approved_days[item["data"]["date"]] = order
+            elif all(item["kind"] == "workout" for item in items):
+                pending.append((order, draft_id, items[0]["data"]["date"]))
+        for order, draft_id, day in pending:
+            if order < approved_days.get(day, 0):
+                con.execute("UPDATE drafts SET status='superseded' WHERE id=?", (draft_id,))
+
     def _apply_draft(self, con, draft_id, edited=None):
         row = con.execute(
             "SELECT kind,data,baseline FROM drafts WHERE id=? AND status='pending'", (draft_id,)
         ).fetchone()
         if not row:
-            raise ValueError("This draft has already been approved or reverted.")
+            raise ValueError(
+                "This preview is no longer pending. It was approved, replaced or reverted."
+            )
         items = self._draft_items(row[0], edited if edited is not None else json.loads(row[1]))
         if row[2] and row[2] != "{}" and self._baseline(con, items) != row[2]:
             raise ValueError(
@@ -726,7 +752,12 @@ class Store:
                         "notes": data["notes"] or current.get("notes", ""),
                     }
             saved.append(self.save(kind, data, _con=con))
-        con.execute("UPDATE drafts SET status='approved' WHERE id=?", (draft_id,))
+        approved_data = {"entries": items} if row[0] == "batch" else items[0]["data"]
+        con.execute(
+            "UPDATE drafts SET status='approved',data=? WHERE id=?",
+            (json.dumps(approved_data), draft_id),
+        )
+        self._supersede_workout_previews(con)
         return saved
 
     def preview(self, draft_id):

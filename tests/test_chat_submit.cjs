@@ -11,12 +11,13 @@ const code = source.slice(
   source.indexOf("async function action("),
 );
 (async () => {
-  const input = { value: "What percentage is 98 of 112?" },
+  const input = { value: "What percentage is 98 of 112?", style: {}, scrollHeight: 120 },
     error = { textContent: "" };
   let calls = 0,
     prevented = false,
     resolve;
   const ctx = {
+    resizeChatComposer: () => {},
     VoiceInput: require("../src/fitness_tracker/web/voice-input.js"),
     state: { coach_consent: { accepted: false }, chat_status: { busy: false } },
     chatResearchMode: false,

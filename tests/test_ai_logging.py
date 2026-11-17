@@ -87,6 +87,66 @@ class AILoggingTests(unittest.TestCase):
         self.assertEqual(len(self.store.entries()), 1)
         self.assertEqual(self.store.entries()[0]["exercises"][0]["sets"][0]["reps"], 8)
 
+    def test_chat_approval_supersedes_older_workout_proposals_only(self):
+        old = self.store.draft("workout", workout(reps=6))
+        food = self.store.draft("meal", {"date": DAY, "description": "Eggs", "protein": 12})
+        other_day = self.store.draft("workout", {**workout(), "date": "2026-11-09"})
+        plan = self.store.draft("plan", workout())
+        mixed = self.store.draft(
+            "batch",
+            {
+                "entries": [
+                    {"kind": "workout", "data": workout()},
+                    {"kind": "meal", "data": {"date": DAY, "description": "Rice", "protein": 4}},
+                ]
+            },
+        )
+        latest = self.store.draft("workout", workout(reps=8))
+        self.store.message("assistant", {"text": "Review this workout", "draft": latest})
+        # Merely looking at the latest preview cannot retire the older one.
+        self.store.preview(latest["id"])
+        self.assertIn(old["id"], {d["id"] for d in self.store.drafts()})
+        with patch.object(self.coach, "generate") as generate:
+            response = self.coach.chat("I approve", True, DAY)
+            generate.assert_not_called()
+        self.assertEqual(response["approved"]["draft_id"], latest["id"])
+        self.assertEqual(self.store.entries()[0]["exercises"][0]["sets"][0]["reps"], 8)
+        self.assertEqual(
+            {d["id"] for d in self.store.drafts()},
+            {food["id"], other_day["id"], plan["id"], mixed["id"]},
+        )
+        with self.store.connect() as con:
+            self.assertEqual(
+                con.execute("SELECT status FROM drafts WHERE id=?", (old["id"],)).fetchone()[0],
+                "superseded",
+            )
+        newer = self.store.draft("workout", workout(reps=12))
+        reopened = Store(self.tmp.name)
+        self.assertIn(newer["id"], {d["id"] for d in reopened.drafts()})
+        with self.assertRaises(ValueError):
+            reopened.approve(old["id"])
+
+    def test_startup_repairs_existing_superseded_preview_without_changing_workout(self):
+        old = self.store.draft("workout", workout(reps=6))
+        latest = self.store.draft("workout", workout(reps=8))
+        self.store.approve(latest["id"])
+        # Reproduce a database written before superseding older previews was implemented.
+        with self.store.connect() as con:
+            con.execute("UPDATE drafts SET status='pending' WHERE id=?", (old["id"],))
+        before = self.store.entries()
+        reopened = Store(self.tmp.name)
+        self.assertEqual(reopened.drafts(), [])
+        self.assertEqual(reopened.entries(), before)
+        self.assertEqual(Store(self.tmp.name).entries(), before)
+
+    def test_approval_uses_edited_workout_date_when_superseding(self):
+        original = self.store.draft("workout", workout())
+        other = self.store.draft("workout", {**workout(), "date": "2026-11-09"})
+        latest = self.store.draft("workout", workout(reps=8))
+        self.store.approve(latest["id"], {**latest["data"], "date": "2026-11-09"})
+        self.assertEqual([d["id"] for d in self.store.drafts()], [original["id"]])
+        self.assertNotIn(other["id"], {d["id"] for d in Store(self.tmp.name).drafts()})
+
     def test_stale_preview_cannot_overwrite_intervening_changes(self):
         draft = self.store.draft("workout", workout())
         self.store.save("meal", {"date": DAY, "description": "Lunch", "protein": 20})

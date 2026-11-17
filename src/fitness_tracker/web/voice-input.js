@@ -11,7 +11,7 @@
     });
   function create(options) {
     let phase = "idle",
-      message = "Record or upload audio · 2 min / 8 MB max",
+      message = "",
       pendingText = "";
     let version = 0,
       stream = null,
@@ -34,7 +34,7 @@
       version++;
       cleanup();
       phase = "idle";
-      message = "Record or upload audio · 2 min / 8 MB max";
+      message = "";
       pendingText = "";
       onChange();
     }
@@ -78,11 +78,6 @@
         fail(error, ticket);
       }
     }
-    async function upload(file) {
-      if (!file || isBusy()) return;
-      pendingText = "";
-      await transcribe(file, ++version);
-    }
     async function record() {
       if (isBusy()) return;
       const ticket = ++version;
@@ -92,7 +87,7 @@
       onChange();
       try {
         if (!Recorder || !media()?.getUserMedia)
-          throw Error("This browser cannot record audio. Use Upload audio instead.");
+          throw Error("Microphone recording is unavailable in this browser. Try a browser with microphone support.");
         const acquired = await media().getUserMedia({ audio: true });
         if (ticket !== version) {
           acquired.getTracks().forEach((track) => track.stop());
@@ -116,7 +111,7 @@
           chunks.push(event.data);
         };
         active.onerror = () =>
-          fail(Error("Microphone recording failed. Try again or upload audio."), ticket);
+          fail(Error("Microphone recording failed. Try recording again."), ticket);
         active.onstop = () => {
           if (ticket !== version) return;
           cleanup();
@@ -131,7 +126,7 @@
       } catch (error) {
         if (error.name === "NotAllowedError")
           error = Error(
-            "Microphone access was denied. Allow it in your browser or use Upload audio.",
+            "Microphone access was denied. Allow it in your browser, then try again.",
           );
         fail(error, ticket);
       }
@@ -145,7 +140,7 @@
       recorder.stop();
       stream?.getTracks().forEach((track) => track.stop());
     }
-    return { state, isBusy, record, stop, cancel, upload, insert };
+    return { state, isBusy, record, stop, cancel, insert };
   }
   root.VoiceInput = { create };
   if (typeof module === "object") module.exports = root.VoiceInput;

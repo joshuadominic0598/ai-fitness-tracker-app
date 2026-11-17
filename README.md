@@ -40,11 +40,11 @@ Follow your strength over time and see which movements you return to. Protein an
 
 ## A coach you can talk to, on your computer
 
-Type your workout or meal, record your voice, or upload an audio clip. Local speech recognition turns audio into editable text in the message box. Check it, make any corrections, then press **Send**. The local **Qwen** coach can suggest exercise matches, estimate protein, help plan a session, and explain your progress.
+Type your workout or meal, or use the microphone beside **Send** to record your voice. Local speech recognition turns audio into editable text in the message box. Check it, make any corrections, then press **Send**. The local **Qwen** coach can suggest exercise matches, estimate protein, help plan a session, and explain your progress.
 
 Long workout notes are handled in smaller batches. You get a preview to review, correct and approve before anything becomes a saved journal entry. Unclear details stay visible so you can fill them in. A new-chat button gives you a fresh conversation when you need one.
 
-The coach uses **Qwen3 8B through Ollama**. Voice transcription uses **Whisper locally**, with a one-time speech-model download on your first recording or upload. Audio is processed on your computer and is not saved in your journal. You can keep tracking manually whenever the coach is unavailable. Optional **Research** looks up public sources online; ordinary coaching runs locally.
+The coach uses **Qwen3 8B through Ollama**. Voice transcription uses **Whisper locally**, with a one-time speech-model download on your first recording. Audio is processed on your computer and is not saved in your journal. You can keep tracking manually whenever the coach is unavailable. Optional **Research** looks up public sources online; ordinary coaching runs locally.
 
 ## How it comes together
 

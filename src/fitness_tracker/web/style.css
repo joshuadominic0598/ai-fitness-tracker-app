@@ -4399,8 +4399,9 @@ a {
 .coach-page .chat-compose textarea {
   flex: 1;
   width: 0;
-  min-height: 60px;
-  max-height: 120px;
+  min-height: calc(5 * 1.6em + 22px);
+  max-height: min(40vh, 320px);
+  line-height: 1.6;
   resize: vertical;
   padding: 10px 12px;
   font-size: 13px;
@@ -4787,27 +4788,37 @@ a {
 .journal-panel {
   scroll-margin-top: 110px;
 }
-.chat-voice-controls {
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-.chat-voice-actions {
+.chat-compose-actions {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 8px;
 }
-.chat-voice-controls p {
-  margin: 6px 0;
+.chat-input-row .chat-microphone {
+  width: 44px;
+  min-width: 44px;
+  padding: 10px;
+  border-radius: 50%;
+}
+.chat-microphone.is-recording {
+  color: #ffd5e2;
+  background: #6f2948;
+  border-color: #ef92b7;
+}
+.chat-voice-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.chat-voice-status p {
+  margin: 0;
   line-height: 1.4;
 }
-.chat-voice-controls .btn {
-  font-size: 12px;
-  padding: 7px 11px;
-}
-.chat-voice-controls textarea {
+#chat-voice-controls textarea {
   width: 100%;
 }
+
 
 
 .dashboard-page .topbar,
