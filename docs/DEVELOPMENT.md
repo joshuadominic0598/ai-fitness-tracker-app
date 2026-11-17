@@ -54,7 +54,7 @@ Earlier provider settings are migrated to the local configuration: unsupported p
 node --check src/fitness_tracker/web/app.js
 ```
 
-Run each `tests/test_*.cjs` file with Node 22+ as well. CI runs Python 3.10 and 3.12 on macOS and Linux. The macOS jobs use Intel for Python 3.10 and Apple Silicon for Python 3.12, spreading runner demand while checking both architectures. Tests use isolated journals and mocked model responses; live Qwen checks are separate and require Ollama. No keys, databases, local environments or generated test output belong in commits.
+Run each `tests/test_*.cjs` file with Node 22+ as well. CI runs Python 3.10 and 3.12 on macOS and Linux. The macOS jobs use the standard `macos-15-intel` runners to avoid the capacity constraints affecting hosted Apple Silicon runners; both Python versions run the full suite. Tests use isolated journals and mocked model responses; live Qwen checks are separate and require Ollama. No keys, databases, local environments or generated test output belong in commits.
 
 ## Structure
 

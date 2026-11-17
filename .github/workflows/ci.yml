@@ -6,14 +6,10 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Use standard Intel Macs while hosted ARM runners have capacity constraints.
+        os: [ubuntu-latest, macos-15-intel]
         python: ['3.10', '3.12']
-        include:
-          # Spread macOS jobs across both architectures; ARM capacity can be constrained.
-          - os: macos-latest
-            python: '3.10'
-            runner: macos-15-intel
-    runs-on: ${{ matrix.runner || matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
