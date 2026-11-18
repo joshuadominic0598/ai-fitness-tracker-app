@@ -13,6 +13,8 @@ def normalize(value):
         (r"\b(?:both|two)\s+arms?\b", ""),
         (r"\b(?:push\s*ups?|pushups)\b", "pushup"),
         (r"\b(?:pull\s*ups?|pullups)\b", "pullup"),
+        (r"\bcunches\b", "crunches"),
+        (r"\bwide grip lat\b|\blat wide grip\b", "wide grip lat"),
         (r"\blegpress\b", "leg press"),
         (r"\bpush\s*downs?\b", "pushdown"),
         (r"\bpull\s*downs?\b", "pulldown"),
@@ -26,11 +28,13 @@ def normalize(value):
     return " ".join(re.findall(r"[a-z]+", value))
 
 
-def rank_exercises(value, limit=4):
+def rank_exercises(value, limit=4, retriever=None):
     """Return suitable real IDs; unrelated movements never become a fallback."""
     from .store import CATALOG
 
     query = normalize(value)
+    if "row" in query.split() and "cable" in query.split():
+        query = query.replace("close grip", "").strip()
     stop = set(
         "then and did like warm up set sets rep reps kg either side total weight loaded machine exercise cable arm".split()
     )
@@ -104,7 +108,59 @@ def rank_exercises(value, limit=4):
         if score >= 7:
             ranked.append((score, exercise["id"]))
     ranked.sort(key=lambda item: (-item[0], len(item[1]), item[1]))
-    return [identifier for _, identifier in ranked[:limit]]
+    identifiers = [identifier for _, identifier in ranked[:limit]]
+    if retriever:
+        semantic = retriever.search(value, category="exercise", limit=max(24, limit * 8))
+        for result in semantic:
+            identifier = result["id"].removeprefix("exercise:")
+            exercise = next((ex for ex in CATALOG if ex["id"] == identifier), None)
+            if not exercise:
+                continue
+            terms = set(
+                normalize(exercise["name"] + " " + " ".join(exercise.get("aliases", []))).split()
+            )
+            required = words & {
+                "press",
+                "curl",
+                "row",
+                "squat",
+                "deadlift",
+                "fly",
+                "raise",
+                "thrust",
+                "plank",
+                "pushdown",
+                "pulldown",
+                "pushup",
+                "pullup",
+                "extension",
+                "shoulder",
+                "chest",
+                "tricep",
+                "bicep",
+                "calf",
+                "leg",
+                "lat",
+            }
+            if required and not required <= terms:
+                continue
+            if (
+                result["retrieval"].startswith("semantic")
+                and result["score"] >= 0.35
+                and identifier not in identifiers
+            ):
+                identifiers.append(identifier)
+        # An unspecified posture must not turn a leg raise into a shoulder press.
+        # Relax posture/equipment only for a confirmation shortlist, never an automatic match.
+        if not identifiers:
+            relaxed = " ".join(
+                word
+                for word in query.split()
+                if word not in {"standing", "seated", "machine", "cable"}
+            )
+            if relaxed and relaxed != query:
+                identifiers = rank_exercises(relaxed, limit=limit)
+    return identifiers[:limit]
 
 
 def canonical_id(identifier, candidates):

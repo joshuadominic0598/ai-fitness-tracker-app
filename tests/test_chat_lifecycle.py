@@ -61,11 +61,11 @@ class ChatLifecycleTests(unittest.TestCase):
         self.assertEqual(self.store.messages()[0]["status"], "sent")
         self.assertEqual(self.store.entries(), [])
 
-    def test_failed_or_interrupted_turn_stays_visible_without_fitness_writes(self):
+    def test_model_recovery_and_interrupted_turn_stay_visible_without_fitness_writes(self):
         with patch.object(self.coach, "generate", side_effect=ProviderError("Quota reached")):
-            with self.assertRaises(ProviderError):
-                self.coach.chat("My meal", True)
-        self.assertEqual(self.store.messages()[0]["status"], "failed")
+            result = self.coach.chat("My meal", True)
+            self.assertTrue(result["recovered"])
+        self.assertEqual(self.store.messages()[0]["status"], "sent")
         self.assertEqual(self.store.entries(), [])
         self.store.message(
             "user", {"text": "Interrupted", "status": "pending", "request_id": "old-request"}

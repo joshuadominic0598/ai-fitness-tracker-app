@@ -52,7 +52,7 @@ class CoachTests(unittest.TestCase):
                 reply,
             ],
         ):
-            result = self.coach.chat("I had dal and eggs", True, research_mode=True)
+            result = self.coach.chat("Log my meal: dal and eggs", True, research_mode=True)
         self.assertEqual(result["draft"]["kind"], "meal")
         self.assertEqual(self.store.entries(), [])
         self.assertEqual(len(self.store.drafts()), 1)
@@ -117,17 +117,17 @@ class CoachTests(unittest.TestCase):
         self.assertEqual(result["items"], [])
         self.assertIn("youtube.com/results?", result["search_url"])
 
-    def test_provider_failure_keeps_failed_chat_without_switching_or_logging_fitness(self):
+    def test_provider_failure_recovers_in_chat_without_switching_or_logging_fitness(self):
         with patch.object(
             self.coach, "generate", side_effect=ProviderError("Rate limit")
         ) as generate:
-            with self.assertRaises(ProviderError):
-                self.coach.chat("Estimate my lunch", True, research_mode=True)
+            result = self.coach.chat("Estimate my lunch", True, research_mode=True)
+            self.assertTrue(result["recovered"])
         self.assertEqual(generate.call_count, 1)
         self.assertEqual(self.store.entries(), [])
         messages = self.store.messages()
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0]["status"], "failed")
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0]["status"], "sent")
         self.assertEqual(messages[0]["text"], "Estimate my lunch")
 
     def test_connection_probe_has_no_private_context_or_writes(self):
@@ -191,5 +191,5 @@ class CoachTests(unittest.TestCase):
                 reply,
             ],
         ):
-            result = self.coach.chat("Estimate lunch", True, "2026-11-05", research_mode=True)
+            result = self.coach.chat("Log lunch", True, "2026-11-05", research_mode=True)
         self.assertEqual(result["draft"]["data"]["date"], "2026-11-05")

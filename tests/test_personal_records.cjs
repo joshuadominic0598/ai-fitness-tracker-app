@@ -30,6 +30,7 @@ const ctx = {
   image: (id) => `/assets/${id}.webp`,
   sessionTitle: (value) => value,
   recordExercise: "",
+  recordSearchQuery: "", recordRankedIds: null, recordSuggestionsOpen: false,
   recordBodyPart: "",
   empty: (title, detail, action) => `${title} ${detail} ${action || ""}`,
   button: (label, action) =>

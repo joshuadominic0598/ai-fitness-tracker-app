@@ -42,13 +42,14 @@ class AgentGraphTests(unittest.TestCase):
                 calculator(value)
 
     def test_skills_cover_training_topics_and_have_sources(self):
-        self.assertGreaterEqual(len(MANIFEST), 8)
+        self.assertGreaterEqual(len(MANIFEST), 7)
+        self.assertNotIn("full_body", {skill["id"] for skill in MANIFEST})
         for question, expected in (
             ("cardio running endurance", "cardio"),
             ("grow my biceps and triceps", "muscle_focus"),
             ("protein meal portions", "nutrition"),
             ("creatine supplement", "supplements"),
-            ("busy full body workout", "full_body"),
+            ("busy full body workout", "strength"),
         ):
             selected = select_skills(question)
             self.assertIn(expected, [s["id"] for s in selected])

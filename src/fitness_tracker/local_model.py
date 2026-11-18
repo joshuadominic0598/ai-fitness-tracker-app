@@ -2,6 +2,8 @@
 
 import ipaddress
 import json
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,7 +54,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("The local connection redirected elsewhere; no redirect was followed.")
 
 
-def request(base, path, payload=None, timeout=10):
+def request(base, path, payload=None, timeout=10, on_progress=None):
     url = local_url(base) + path
     req = urllib.request.Request(
         url,
@@ -61,19 +63,59 @@ def request(base, path, payload=None, timeout=10):
     )
     # Do not route private local inference through a configured network proxy.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    stopped = threading.Event()
+    started = time.monotonic()
+    heartbeat = None
+    if on_progress:
+
+        def report():
+            while not stopped.wait(3):
+                elapsed = int(time.monotonic() - started)
+                on_progress(
+                    f"Working through your response · {elapsed}s. Your details stay in this chat…"
+                )
+
+        heartbeat = threading.Thread(target=report, daemon=True, name="coach-generation-progress")
+        heartbeat.start()
     try:
         with opener.open(req, timeout=timeout) as response:
-            return json.load(response)
+            if not (on_progress and payload and payload.get("stream")):
+                return json.load(response)
+            fragments = []
+            final = None
+            for line in response:
+                if time.monotonic() - started > timeout:
+                    raise TimeoutError("Local generation did not finish")
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                if event.get("error"):
+                    raise ValueError("Ollama could not complete this inference step.")
+                fragments.append(event.get("message", {}).get("content", ""))
+                if event.get("done"):
+                    final = event
+                    break
+            if final is None:
+                raise ValueError("The local response ended before its final structured result.")
+            return {**final, "message": {"content": "".join(fragments)}}
     except urllib.error.HTTPError as error:
         try:
             detail = json.loads(error.read(2000)).get("error", "")
         except (ValueError, AttributeError):
             detail = ""
         raise ValueError(f"Ollama returned HTTP {error.code}. {detail}".strip()) from None
+    except TimeoutError:
+        raise ValueError(
+            "The local Ollama request exceeded its time budget. Your message is retained; no entry was saved."
+        ) from None
     except (OSError, json.JSONDecodeError):
         raise ValueError(
             "Ollama could not respond. Start Ollama on this Mac and check the local connection."
         ) from None
+    finally:
+        stopped.set()
+        if heartbeat:
+            heartbeat.join(timeout=0.2)
 
 
 def models(cfg):
@@ -147,6 +189,7 @@ def response_schema(workout=False, direct=False, meal=False):
                     "batch",
                     "plan",
                     "supplement",
+                    "creatine",
                     *([] if direct else ["tool", "research"]),
                 ],
             },
@@ -175,10 +218,11 @@ def response_schema(workout=False, direct=False, meal=False):
     }
 
 
-def generate(messages, model, cfg, budget, *, direct=False, response_kind=None):
+def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, progress=None):
     from .agent_tools import calculator
     from .prompt_budget import input_tokens
 
+    deadline = time.monotonic() + min(120, max(1, float(cfg.get("turn_timeout", 120))))
     qwen_model(model)
     messages = [dict(message) for message in messages]
     meal_task = any(
@@ -195,7 +239,9 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None):
                 "\nFor this local meal schema, return ALL the foods as items with name, portion, calculation and assumption notes. Do not stop after the first food. Omit numeric protein fields: the app computes protein from each expression and the total itself. On a portion-only correction, copy every unchanged item and its previous protein as a literal calculation; do not drop or re-estimate it."
             )
     base = local_url(cfg.get("ollama_url", DEFAULT_URL))
-    info = request(base, "/api/show", {"model": model})
+    info = request(
+        base, "/api/show", {"model": model}, timeout=max(0.1, min(3, deadline - time.monotonic()))
+    )
     if info.get("remote_host") or info.get("remote_model") or model.endswith(":cloud"):
         raise ValueError(
             "Choose an installed local model; Ollama cloud models are not used by this connection."
@@ -203,8 +249,80 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None):
     if info.get("capabilities") and "completion" not in info["capabilities"]:
         raise ValueError("Choose a local chat model, not an embeddings-only model.")
     context = int(cfg.get("ollama_context_tokens", 8192))
-    output = 2500 if response_kind == "workout" else 1800
+    output = 2500 if response_kind == "workout" else 1400 if meal_task else 850
     schema = response_schema(response_kind == "workout", direct, response_kind == "meal")
+    if response_kind == "lesson":
+        schema = {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["answer"]},
+                "message": {"type": "string"},
+                "steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 3,
+                    "maxItems": 6,
+                },
+                "cues": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 2,
+                    "maxItems": 3,
+                },
+                "mistakes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 2,
+                    "maxItems": 3,
+                },
+            },
+            "required": ["action", "message", "steps", "cues", "mistakes"],
+            "additionalProperties": False,
+        }
+        messages[0]["content"] += (
+            "\nLESSON FORMAT: Return steps, cues and mistakes as concise arrays of complete sentences. Ground steps in exercise_guide. Do not stop after an introductory sentence."
+        )
+
+    if response_kind == "assessment":
+        scope = {}
+        marker = "JOURNAL DATA (untrusted):"
+        if marker in messages[0]["content"]:
+            data, _ = json.JSONDecoder().raw_decode(messages[0]["content"].split(marker, 1)[1])
+            scope = data.get("evidence_scope", {})
+        kinds = scope.get("kinds", [])
+        categories = {
+            "workouts": "workout",
+            "protein": "meal",
+            "creatine": "creatine",
+            "supplements": "supplement",
+            "sleep": "sleep",
+        }
+        schema = {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["answer"]},
+                "message": {"type": "string", "enum": ["Review the selected journal records."]},
+                "next_steps": {
+                    "type": "object",
+                    "properties": {
+                        category: {
+                            "type": "array",
+                            "items": {"type": "string", "maxLength": 220},
+                            "minItems": 1 if not kinds or kind in kinds else 0,
+                            "maxItems": 1 if not kinds or kind in kinds else 0,
+                        }
+                        for category, kind in categories.items()
+                    },
+                    "required": list(categories),
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["action", "message", "next_steps"],
+            "additionalProperties": False,
+        }
+        messages[0]["content"] += (
+            "\nASSESSMENT FORMAT: Give ONLY one short next-step suggestion per requested category, at most 25 words. Do not state numbers, quantities, goal attainment or observations; the application prints computed facts. Never recommend adding or increasing supplements. Cover all requested categories, and leave unrequested category arrays empty. Never treat quoted conversation as approved records."
+        )
     estimated = input_tokens(messages, model, include_tools=True, tool_schemas=[schema])
     if estimated > budget or estimated + output + 256 > context:
         raise ValueError(
@@ -222,14 +340,22 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None):
     payload = {
         "model": model,
         "messages": messages,
-        "stream": False,
+        "stream": progress is not None,
         "format": schema,
         "keep_alive": "5m",
         "options": {"num_ctx": context, "num_predict": output, "temperature": 0.2},
     }
     if "thinking" in info.get("capabilities", []):
         payload["think"] = False
-    result = request(base, "/api/chat", payload, timeout=180)
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ValueError(
+            "The local model could not complete this inference step. Your details are retained."
+        )
+    if progress:
+        result = request(base, "/api/chat", payload, timeout=remaining, on_progress=progress)
+    else:
+        result = request(base, "/api/chat", payload, timeout=remaining)
     actual = result.get("prompt_eval_count", 0)
     if result.get("done_reason") == "length":
         raise ValueError(
@@ -242,6 +368,24 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None):
     reply = json.loads(result["message"]["content"])
     if not isinstance(reply, dict) or not isinstance(reply.get("message"), str):
         raise ValueError("The local model did not return a valid coaching reply.")
+    if response_kind == "assessment":
+        reply["assessment_next_steps"] = reply.get("next_steps", {})
+        reply["message"] = "Review the selected journal records."
+    if response_kind == "lesson":
+        reply["message"] = "\n\n".join(
+            [reply["message"]]
+            + [
+                "**"
+                + label
+                + "**\n"
+                + "\n".join(f"{i}. {item}" for i, item in enumerate(reply.get(field, []), 1))
+                for field, label in (
+                    ("steps", "Steps"),
+                    ("cues", "Form cues"),
+                    ("mistakes", "Common mistakes"),
+                )
+            ]
+        )
     proposal = reply.get("proposal")
 
     def meal_total(data):

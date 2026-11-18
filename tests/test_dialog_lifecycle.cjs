@@ -82,7 +82,7 @@ class NativeDialog {
   );
   const action = source.slice(
     source.indexOf("async function action("),
-    source.indexOf('document.addEventListener("click"'),
+    source.indexOf("\ndocument.addEventListener", source.indexOf("async function action(")),
   );
   let workoutOpened = false,
     foodOpened = false,
@@ -128,6 +128,7 @@ class NativeDialog {
   const context = {
     BodyMap: { bind() {} },
     voiceInput: { cancel() {} },
+    hideHabitDetails() {},
     resizeChatComposer() {},
     location: { hash: "#overview" },
     document: { body: { classList: { toggle() {} } } },

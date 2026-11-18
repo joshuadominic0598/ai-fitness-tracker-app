@@ -47,9 +47,9 @@ def chat_topics(message, history=(), logging_kind=None):
         "assessment": r"\b(assess\w*|analy[sz]\w*|patterns?|progress|consistency)\b|\b(?:review|evaluate) my\b|\bmy (?:information|data|logs)\b|\bhow (?:am i|have i been) doing\b|\bstrong and weak\b",
         "training": r"\b(workouts?|exercises?|routines?|programs?|sessions?|trained|training|sets?|reps?|bench|curls?|planks?|grow|hypertrophy|strength|arms?|biceps|triceps|forearms|cardio|fitness|lifting|gym)\b",
         "meal": r"\b(protein|meal|food|ate|eat|diet|nutrition|breakfast|lunch|dinner)\b",
-        "supplement": r"\b(supplements?|vitamin|collagen|fish oil)\b",
+        "supplement": r"\b(supplements?|vitamin|vitc|vitd|b12|vit c|vit d|collagen|fish oil)\b",
         "creatine": r"\bcreatine\b",
-        "sleep": r"\b(sleep|slept|nap|rest day|uninterrupted)\b",
+        "sleep": r"\b(sleep|slept|nap|night|rest day|uninterrupted|uniter\w*)\b",
         "body": r"\b((?:body|my) weight|bodyweight measurement|weigh|weighed)\b",
     }
     for topic, pattern in patterns.items():
@@ -112,7 +112,7 @@ def scoped_context(context, message, history=(), logging_kind=None):
             }
             for eid in ranked
         ]
-        ctx["recent_entries"] = ctx["recent_entries"][:3]
+        ctx["recent_entries"] = ctx["recent_entries"][:1]
     else:
         if "training" in topics:
             ctx["profile"] = {
@@ -148,6 +148,17 @@ def scoped_context(context, message, history=(), logging_kind=None):
                 for entry in compact_context(context)["recent_entries"]
                 if entry["kind"] in {kinds[t] for t in topics if t in kinds}
             ][:2]
+    for key in (
+        "evidence_scope",
+        "matched_entry_count",
+        "retrieved_evidence",
+        "exercise_guide",
+        "conversation_memory",
+        "scope_totals",
+        "metric_windows",
+    ):
+        if key in context:
+            ctx[key] = context[key]
     if context.get("pending_draft"):
         ctx["pending_draft"] = context["pending_draft"]
     return ctx
@@ -192,7 +203,11 @@ def build_chat_messages(
         return input_tokens(messages, model, include_tools=protocol, direct_provider=provider)
 
     while count() > limit:
-        if ctx["recent_entries"]:
+        if ctx.get("conversation_memory"):
+            ctx["conversation_memory"].pop()
+        elif ctx.get("retrieved_evidence"):
+            ctx["retrieved_evidence"].pop()
+        elif ctx["recent_entries"]:
             ctx["recent_entries"].pop()
         elif catalog:
             catalog = catalog[:-1]

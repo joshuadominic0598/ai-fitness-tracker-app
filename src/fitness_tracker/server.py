@@ -152,6 +152,49 @@ class Handler(BaseHTTPRequestHandler):
             # A page refresh does not cancel or duplicate the persisted coaching turn.
             pass
 
+    def stream_chat(self, body):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
+        write_lock = threading.Lock()
+
+        def emit(event):
+            try:
+                with write_lock:
+                    self.wfile.write((json.dumps(event) + "\n").encode())
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Persisted request IDs still prevent duplicate journal actions.
+
+        emit({"type": "stage", "message": "Received. Understanding your request…"})
+        try:
+            result = self.server.coach.chat(
+                body.get("message"),
+                self.server.store.coach_consent()["accepted"],
+                body.get("date"),
+                body.get("request_id"),
+                body.get("research", False),
+                body.get("revise_draft_id"),
+                body.get("logging_kind"),
+                body.get("approve_draft_id"),
+                progress=emit,
+            )
+            emit({"type": "final", "response": result})
+        except ValueError as error:
+            emit({"type": "error", "message": str(error)})
+        except Exception:
+            emit(
+                {
+                    "type": "error",
+                    "message": "The coach could not finish. Your request is retained; please retry.",
+                }
+            )
+
     def trusted_host(self):
         expected = f"127.0.0.1:{self.server.server_port}"
         return self.headers.get("Host") == expected
@@ -205,6 +248,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(self.server.store.profile())
         if path == "/api/coach-skills":
             return self.send(skill_catalog())
+        if path == "/api/exercise-search":
+            params = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            query = params.get("q", [""])[0].strip()
+            try:
+                limit = int(params.get("limit", ["30"])[0])
+                if len(query) > 200 or not 1 <= limit <= 100:
+                    raise ValueError("Use a short exercise search and at most 100 results.")
+                items = self.server.coach.retrieval.search_exercises(
+                    query,
+                    limit=limit,
+                    tracked=params.get("tracked", ["0"])[0] == "1",
+                    body_part=params.get("body_part", [""])[0],
+                )
+                return self.send({"query": query, "items": items})
+            except ValueError as error:
+                return self.send({"error": str(error)}, 400)
         if path == "/api/exercises":
             return self.send(CATALOG)
         if path == "/api/export":
@@ -301,6 +360,8 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     self.server.coach.lock.release()
             elif path == "/api/chat":
+                if body.get("stream") is True:
+                    return self.stream_chat(body)
                 result = self.server.coach.chat(
                     body.get("message"),
                     store.coach_consent()["accepted"],
@@ -374,6 +435,7 @@ def main():
                 pass
     if server is None:
         raise SystemExit("No available port. Choose another with --port.")
+    server.coach.retrieval.start()
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"Blaze Athletics: {url}\nWorkspace: {directory}\nPress Ctrl-C to stop.", flush=True)
     if args.open:
@@ -383,6 +445,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        server.coach.retrieval.stop.set()
         server.server_close()
 
 

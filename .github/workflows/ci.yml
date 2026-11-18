@@ -28,11 +28,13 @@ jobs:
       - run: node --check src/fitness_tracker/web/dashboard.js
       - run: node --check src/fitness_tracker/web/date-picker.js
       - run: node tests/test_workout_history.cjs
+      - run: node tests/test_workout_start.cjs
       - run: node tests/test_workout_scroll.cjs
       - run: node tests/test_dialog_lifecycle.cjs
       - run: node tests/test_goals.cjs
       - run: node tests/test_voice_input.cjs
       - run: node tests/test_chat_submit.cjs
+      - run: node tests/test_coach_streaming.cjs
       - run: node tests/test_supplement_units.cjs
       - run: node tests/test_session_recovery.cjs
       - run: node tests/test_coach_model_controls.cjs
@@ -41,6 +43,7 @@ jobs:
       - run: node tests/test_ai_logging.cjs
       - run: node tests/test_body_map.cjs
       - run: node tests/test_dashboard.cjs
+      - run: node tests/test_habit_details.cjs
       - run: node tests/test_intake_chart.cjs
       - run: node tests/test_week_review.cjs
       - run: node tests/test_personal_records.cjs
