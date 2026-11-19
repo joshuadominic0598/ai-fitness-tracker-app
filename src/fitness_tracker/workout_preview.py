@@ -1,22 +1,45 @@
-"""Bounded workout interpretation with a usable preview even after model failures."""
+"""Extract → retrieve → clarify → validate source sets without generative copying."""
 
 import re
 
-from .exercise_matching import canonical_id
 from .store import EXERCISES, valid_date, validate
-from .workout_notes import build_messages, clean_diary, inventory
+from .workout_notes import clean_diary, inventory, movement_name
 
 BATCH_SIZE = 5
 
 
 def prepare_workout(coach, source_text, selected_date, provider, model, key):
-    """Retrieve per exercise, split model work, and ground quantities in source text."""
-    from .coach import ProviderError
+    """Retrieve per movement; keep every stated set and ask about uncertain matches."""
 
-    source = inventory(source_text)
+    coach.stage("Reading each movement and keeping every repeated set…")
+    extracted = inventory(source_text)
+    retriever = getattr(coach, "retrieval", None)
+    if retriever:
+        coach.stage("Matching your exercise names in one local retrieval batch…")
+        retriever.prefetch(
+            [g["label"] for g in extracted["groups"]]
+            + [movement_name(line) for line in extracted["unsupported"]]
+        )
+    source = inventory(source_text, retriever)
     stated_date = re.search(r"\b\d{4}-\d{2}-\d{2}\b", source_text)
     selected_date = valid_date(stated_date[0] if stated_date else selected_date)
     groups = [group for group in source["groups"] if group["sets"]]
+    ambiguous = [g for g in groups if g.get("requires_confirmation")]
+    for group in groups:
+        if re.search(r"\bstanding biceps? curls?\b", group["label"], re.I) and not re.search(
+            r"dumbbell|barbell|cable", group["label"], re.I
+        ):
+            group["candidates"] = [
+                "Dumbbell_Bicep_Curl",
+                "Barbell_Curl",
+                "Standing_Biceps_Cable_Curl",
+            ]
+            group["candidates"] = [eid for eid in group["candidates"] if eid in EXERCISES]
+            if not group["candidates"] or group["candidates"][0] == "Barbell_Curl":
+                group["candidates"].insert(0, "Dumbbell_Alternate_Bicep_Curl")
+            if group not in ambiguous:
+                ambiguous.append(group)
+    groups = [g for g in groups if g not in ambiguous]
     pending = list(
         dict.fromkeys(
             [
@@ -37,51 +60,33 @@ def prepare_workout(coach, source_text, selected_date, provider, model, key):
             ]
         )
     )
-    exercises, matches, notices, token_counts, trace = [], [], [], [], []
+    matching_choices = [
+        {"label": group["label"], "candidates": group["candidates"][:3]} for group in ambiguous
+    ]
+    for group in ambiguous:
+        retained = ", ".join(
+            (
+                f"{values['seconds']:g} sec"
+                if values.get("seconds")
+                else f"{values['weight']:g} kg × {values['reps']} reps"
+            )
+            for values in group["sets"]
+        )
+        names = [EXERCISES[eid]["name"] for eid in group["candidates"][:3]]
+        pending.append(
+            group["label"]
+            + " (retained: "
+            + retained
+            + "). Which did you use? "
+            + "; ".join(f"{i}. {name}" for i, name in enumerate(names, 1))
+            + ". Your sets are retained."
+        )
+    exercises, trace = [], []
 
     def handle(batch):
-        ids = list(dict.fromkeys(eid for group in batch for eid in group["candidates"]))
-        catalog = [
-            {"id": eid, "name": EXERCISES[eid]["name"], "equipment": EXERCISES[eid]["equipment"]}
-            for eid in ids
-        ]
-        batch_text = "\n".join(dict.fromkeys(s["source"] for group in batch for s in group["sets"]))
-        try:
-            messages, tokens = build_messages(
-                "",
-                batch_text,
-                selected_date,
-                catalog,
-                coach.input_budget,
-                model,
-                provider,
-                source={"groups": batch},
-            )
-        except ValueError:
-            if len(batch) > 1:
-                midpoint = len(batch) // 2
-                handle(batch[:midpoint])
-                handle(batch[midpoint:])
-                return
-            messages, tokens = [], 0
-        generated = []
-        try:
-            if not messages:
-                raise ValueError("Single movement exceeds model input budget")
-            reply = coach.generate(
-                messages, provider, model, key, direct=True, response_kind="workout"
-            )
-            if not isinstance(reply, dict):
-                raise ValueError("Malformed workout response")
-            proposal = reply.get("proposal")
-            generated = proposal.get("exercises", []) if isinstance(proposal, dict) else []
-            if not isinstance(generated, list):
-                generated = []
-        except (ProviderError, ValueError, TypeError, KeyError):
-            notices.append(
-                "The AI provider was unavailable or couldn't interpret one batch. This preview uses your explicitly supplied sets and suggested library matches; review the exercise variations before approving."
-            )
-        token_counts.append(tokens)
+        coach.stage(
+            f"Checking {len(batch)} movements and {sum(len(g['sets']) for g in batch)} supplied sets…"
+        )
         trace.append(
             {
                 "step": "workout_batch",
@@ -90,25 +95,7 @@ def prepare_workout(coach, source_text, selected_date, provider, model, key):
             }
         )
         for group in batch:
-            choices = list(
-                dict.fromkeys(
-                    match
-                    for item in generated
-                    if isinstance(item, dict)
-                    for match in [canonical_id(item.get("exercise_id"), group["candidates"])]
-                    if match
-                )
-            )
-            # A bad ID cannot invalidate the remaining workout. Each source
-            # movement already has its own ranked, real library shortlist.
-            # Broad aliases with no supplied variation use the conventional
-            # first suggestion, rather than borrowing another source movement.
-            eid = (
-                choices[0]
-                if len(choices) == 1
-                and group["label"] not in ("triceps pushdown", "chest fly", "leg curl")
-                else group["candidates"][0]
-            )
+            eid = group["candidates"][0]
             sets = [
                 {"weight": s["weight"], "reps": s["reps"], "seconds": s.get("seconds", 0)}
                 for s in group["sets"]
@@ -128,20 +115,29 @@ def prepare_workout(coach, source_text, selected_date, provider, model, key):
                 )
                 continue
             exercises.append(exercise)
-            matches.append(f"{group['label']} → {EXERCISES[eid]['name']}")
 
     for start in range(0, len(groups), BATCH_SIZE):
         handle(groups[start : start + BATCH_SIZE])
-    notes = "Exercise variations to review: " + "; ".join(matches) + ". Ask to change any match."
+    combined = {}
+    for exercise in exercises:
+        eid = exercise["exercise_id"]
+        if eid in combined:
+            combined[eid]["sets"].extend(exercise["sets"])
+        else:
+            combined[eid] = exercise
+    exercises = list(combined.values())
+    notes = ""
     if pending:
-        notes += "\nNeeds clarification (not included in the sets above):\n" + "\n".join(pending)
+        notes += "Needs clarification (not included in the sets above):\n" + "\n".join(pending)
     if exercises:
         reply = {
             "action": "workout",
             "message": "Review your workout and exercise matches.",
             "proposal": {"date": selected_date, "notes": notes, "exercises": exercises},
             "workout_prepared": True,
+            "source_set_count": sum(len(g["sets"]) for g in source["groups"]),
             "workout_incomplete": bool(pending),
+            "matching_choices": matching_choices,
         }
     else:
         # Even with no valid sets there is still a source preview to correct.
@@ -153,12 +149,13 @@ def prepare_workout(coach, source_text, selected_date, provider, model, key):
             "proposal": None,
             "workout_prepared": True,
             "workout_incomplete": True,
+            "matching_choices": matching_choices,
         }
     return {
         "reply": reply,
         "papers": [],
         "skills": [],
         "trace": trace,
-        "notices": list(dict.fromkeys(notices)),
-        "token_counts": [n for n in token_counts if n],
+        "notices": [],
+        "token_counts": [],
     }

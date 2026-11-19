@@ -252,15 +252,15 @@ reverse curl (forearms) 8kg - 7 reps"""
                 },
             ) as generate:
                 result = coach.chat(note, True, "2026-02-01", logging_kind="workout")
-            self.assertEqual(generate.call_args.kwargs["response_kind"], "workout")
-            self.assertIn("Cable_Rear_Delt_Fly", str(generate.call_args.args[0]))
+            generate.assert_not_called()
+
             exercises = result["draft"]["data"]["exercises"]
             self.assertEqual(len(exercises), 7)
             self.assertEqual(sum(len(e["sets"]) for e in exercises), 15)
-            self.assertIn("1. Hammer Curls\n   Set 1: 12 kg × 8 reps", result["text"])
+            self.assertIn("1. **Hammer Curls**\n   Set 1: 12 kg × 8 reps", result["text"])
             self.assertEqual(result["text"].count("   Set "), 15)
-            self.assertIn("6. Cable Rear Delt Fly", result["text"])
-            self.assertIn("7. Reverse Barbell Curl", result["text"])
+            self.assertIn("6. **Cable Rear Delt Fly**", result["text"])
+            self.assertIn("7. **Reverse Barbell Curl**", result["text"])
             for group, exercise in zip(source["groups"], exercises):
                 self.assertEqual(
                     [(s["weight"], s["reps"]) for s in group["sets"]],
@@ -282,13 +282,13 @@ reverse curl (forearms) 8kg - 7 reps"""
             self.assertEqual(
                 sum(len(e["sets"]) for e in fallback["draft"]["data"]["exercises"]), 15
             )
-            self.assertIn("Exercise variations to review", fallback["draft"]["data"]["notes"])
+            self.assertEqual(fallback["draft"]["data"]["notes"], "")
             self.assertEqual(store.entries(), [])
             with patch.object(coach, "generate", side_effect=ProviderError("HTTP 503")) as generate:
                 offline = coach.chat(note, True, "2026-02-01", logging_kind="workout")
-            self.assertEqual(generate.call_count, 2)
+            generate.assert_not_called()
             self.assertEqual(offline["action"], "workout")
-            self.assertIn("provider was unavailable", offline["notices"][0])
+            self.assertEqual(offline["notices"], [])
             self.assertEqual(sum(len(e["sets"]) for e in offline["draft"]["data"]["exercises"]), 15)
             self.assertEqual(store.entries(), [])
 
@@ -351,9 +351,7 @@ reverse curl (forearms) 8kg - 7 reps"""
                 },
             ) as generate:
                 result = coach.chat(CLARIFY, True, "2026-02-01")
-                self.assertEqual(generate.call_count, 2)
-                self.assertIn("EXPLICIT SET INVENTORY", generate.call_args.args[0][0]["content"])
-                self.assertNotIn("Athlete", generate.call_args.args[0][-1]["content"])
+                generate.assert_not_called()
             self.assertIn("draft", result)
             self.assertNotIn("workout_incomplete", result)
             self.assertEqual(len(store.drafts()), 1)

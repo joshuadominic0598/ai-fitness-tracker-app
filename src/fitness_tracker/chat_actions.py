@@ -101,8 +101,8 @@ def requested_log_kind(message, history=()):
     """Recognize a request to prepare data, including short conversational follow-ups."""
     if not re.match(
         r"^\s*(?:(?:ya|yeah|yes|ok|okay|please|sure)[,! .]+)*"
-        r"(?:(?:can|could|would) you\s+|i (?:want|would like) (?:you )?to\s+)?"
-        r"(?:log\b|add\b|record\b|save\b|prepare\b.{0,35}\b(?:preview|entry|log)\b)",
+        r"(?:(?:can|could|would) you\s+|help me\s+|i (?:want|would like) (?:you )?to\s+)?"
+        r"(?:log\b|add\b|record\b|save\b|prepare\b.{0,35}\b(?:preview|entry|log|draft)\b)",
         message,
         re.I,
     ) or re.search(r"\b(?:don't|do not|not yet|instead of)\b", message, re.I):
@@ -182,9 +182,7 @@ def draft_message(draft):
         for item in items
     )
     sections = (
-        [
-            "Partial workout preview — the unresolved items listed below are not included in these sets."
-        ]
+        ["**Partial workout preview** — resolve the questions below before approval."]
         if incomplete
         else []
     ) + [draft_summary(draft)]
@@ -206,12 +204,20 @@ def draft_message(draft):
                 sections.append("\n".join(lines))
             continue
         if item["kind"] not in ("workout", "plan"):
+            if item["data"].get("notes"):
+                note = "**Note:** " + item["data"]["notes"]
+                if note not in sections:
+                    sections.append(note)
+            if item["kind"] == "sleep" and item["data"].get("continuous_hours"):
+                sections.append(
+                    f"Uninterrupted: {item['data']['continuous_hours']:g} h. Optional: add notes before approval."
+                )
             continue
         data = item["data"]
         lines = []
         for index, exercise in enumerate(data["exercises"], 1):
             name = EXERCISES[exercise["exercise_id"]]["name"]
-            lines.append(f"{index}. {name}")
+            lines.append(f"{index}. **{name}**")
             for set_index, values in enumerate(exercise.get("sets", []), 1):
                 load = f"{values['weight']:g} kg" if values["weight"] else "Bodyweight"
                 quantity = (
@@ -221,7 +227,20 @@ def draft_message(draft):
                 )
                 lines.append(f"   Set {set_index}: {load} × {quantity}")
         if data.get("notes"):
-            lines.append("\nNotes / matches to review: " + data["notes"])
+            notes = data["notes"]
+            if "Needs clarification (not included in the sets above):" in notes:
+                _, questions = notes.split(
+                    "Needs clarification (not included in the sets above):", 1
+                )
+                lines.append(
+                    "\n**Needs clarification**\n"
+                    + "\n".join(
+                        f"{i}. {question}"
+                        for i, question in enumerate(questions.strip().splitlines(), 1)
+                    )
+                )
+            elif notes:
+                lines.append("\n**Notes:** " + notes)
         sections.append("\n".join(lines))
     sections.append(
         "Tell me what to change, or approve it here when everything looks right. "

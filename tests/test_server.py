@@ -40,6 +40,23 @@ class HTTPTests(unittest.TestCase):
                 self.post("profile", {}, token, origin)
             self.assertEqual(e.exception.code, 403)
 
+    def test_exercise_search_ranks_typos_and_validates_limits_without_saving(self):
+        with urllib.request.urlopen(
+            self.url + "/api/exercise-search?q=hamer%20curls&limit=3"
+        ) as response:
+            result = json.load(response)
+        self.assertEqual(result["items"][0]["id"], "Hammer_Curls")
+        self.assertLessEqual(len(result["items"]), 3)
+        with urllib.request.urlopen(
+            self.url + "/api/exercise-search?q=hamer%20curls&tracked=1"
+        ) as response:
+            self.assertEqual(json.load(response)["items"], [])
+        for query in ("limit=101", "limit=bad", "q=" + "x" * 201):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(self.url + "/api/exercise-search?" + query)
+            self.assertEqual(error.exception.code, 400)
+        self.assertEqual(self.server.store.entries(), [])
+
     def test_transcription_is_session_protected_and_never_sends_or_saves(self):
         from unittest.mock import patch
 
@@ -88,7 +105,7 @@ class HTTPTests(unittest.TestCase):
             self.assertEqual(snapshot["messages"], [])
             self.assertEqual(snapshot["chat_hidden_drafts"], [draft["id"]])
         self.assertEqual(store.entries(), [entry])
-        self.assertEqual(store.drafts(), [draft])
+        self.assertEqual(store.drafts(), [])
         store.message("user", {"text": "New conversation"})
         self.assertEqual([m["text"] for m in store.messages()], ["New conversation"])
         with urllib.request.urlopen(self.url + "/api/export") as response:

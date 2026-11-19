@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import unittest
@@ -5,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fitness_tracker.chat_actions import meal_portion_revision
-from fitness_tracker.coach import Coach, Connections, ProviderError
+from fitness_tracker.coach import Coach, Connections
 from fitness_tracker.local_model import generate, local_url, models
 from fitness_tracker.store import Store
 
@@ -204,6 +205,76 @@ class LocalModelTests(unittest.TestCase):
             "low", result["proposal"], "an inconsistent model range is never displayed"
         )
 
+    def test_assessment_schema_requires_requested_categories_and_formats_points(self):
+        payload = {
+            "action": "answer",
+            "message": "Here are the logged patterns.",
+            "next_steps": {
+                "workouts": [],
+                "protein": ["20 g logged on 2026-11-18; add portions to compare meals."],
+                "creatine": [],
+                "supplements": [],
+                "sleep": [],
+            },
+        }
+        messages = [
+            {
+                "role": "system",
+                "content": 'JOURNAL DATA (untrusted):{"evidence_scope":{"kinds":["meal"]}}',
+            },
+            {"role": "user", "content": "Assess protein"},
+        ]
+        with patch(
+            "fitness_tracker.local_model.request", side_effect=[INFO, reply(payload)]
+        ) as request:
+            result, _ = generate(
+                messages, "qwen3:8b", {}, 5000, direct=True, response_kind="assessment"
+            )
+        fields = request.call_args.args[2]["format"]["properties"]["next_steps"]["properties"]
+        self.assertEqual(fields["protein"]["minItems"], 1)
+        self.assertEqual(fields["workouts"]["maxItems"], 0)
+        self.assertEqual(
+            result["assessment_next_steps"]["protein"], payload["next_steps"]["protein"]
+        )
+
+    def test_slow_generation_uses_streaming_progress_instead_of_old_26_second_cutoff(self):
+        stages = []
+        with patch("fitness_tracker.local_model.request", side_effect=[INFO, reply()]) as request:
+            generate(
+                [{"role": "user", "content": "Explain this carefully"}],
+                "qwen3:8b",
+                {"turn_timeout": 90},
+                5000,
+                direct=True,
+                progress=stages.append,
+            )
+        self.assertTrue(request.call_args.args[2]["stream"])
+        self.assertGreater(request.call_args.kwargs["timeout"], 30)
+        self.assertTrue(callable(request.call_args.kwargs["on_progress"]))
+
+    def test_native_ollama_stream_is_assembled_before_validation(self):
+        from fitness_tracker.local_model import request
+
+        parts = [
+            {"message": {"content": '{"action":"answer",'}, "done": False},
+            {"message": {"content": '"message":"Complete."}'}, "done": False},
+            {"message": {"content": ""}, "done": True, "eval_count": 12},
+        ]
+        transport = unittest.mock.Mock()
+        transport.open.return_value = io.BytesIO("\n".join(json.dumps(p) for p in parts).encode())
+        with patch(
+            "fitness_tracker.local_model.urllib.request.build_opener", return_value=transport
+        ):
+            result = request(
+                "http://127.0.0.1:11434",
+                "/api/chat",
+                {"stream": True},
+                timeout=60,
+                on_progress=lambda text: None,
+            )
+        self.assertEqual(json.loads(result["message"]["content"])["message"], "Complete.")
+        self.assertEqual(result["eval_count"], 12)
+
     def test_over_budget_partial_responses_and_unavailable_local_never_use_cloud(self):
         with patch("fitness_tracker.local_model.request", return_value=INFO) as request:
             with self.assertRaisesRegex(ValueError, "no message was truncated"):
@@ -226,6 +297,6 @@ class LocalModelTests(unittest.TestCase):
                 ),
                 patch("fitness_tracker.coach.request_json") as cloud,
             ):
-                with self.assertRaisesRegex(ProviderError, "Ollama is stopped"):
-                    coach.chat("Hello", True)
+                result = coach.chat("Hello", True)
+                self.assertTrue(result["recovered"])
             cloud.assert_not_called()

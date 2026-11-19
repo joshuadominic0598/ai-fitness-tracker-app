@@ -294,6 +294,43 @@ class Store:
         with self.connect() as con:
             if "baseline" not in {row[1] for row in con.execute("PRAGMA table_info(drafts)")}:
                 con.execute("ALTER TABLE drafts ADD COLUMN baseline TEXT DEFAULT '{}'")
+        from .semantic_index import initialize, journal_chunk, upsert
+
+        with self.connect() as con:
+            initialize(con)
+            for exercise in CATALOG:
+                content = " ".join(
+                    [
+                        exercise["name"],
+                        *exercise.get("aliases", []),
+                        exercise.get("equipment") or "",
+                        *exercise["primaryMuscles"],
+                        *exercise.get("instructions", []),
+                    ]
+                )
+                upsert(con, "exercise:" + exercise["id"], "exercise", "", content)
+            for identifier, kind, raw in con.execute("SELECT id,kind,data FROM entries").fetchall():
+                journal_chunk(con, identifier, kind, json.loads(raw))
+            row = con.execute("SELECT data FROM settings WHERE key='chat_start_id'").fetchone()
+            boundary = int(json.loads(row[0])) if row else 0
+            for identifier, raw in con.execute(
+                "SELECT id,data FROM messages WHERE role='user' AND id>?", (boundary,)
+            ).fetchall():
+                message = json.loads(raw)
+                chunk_id = "conversation:" + str(identifier)
+                if (
+                    message.get("status") not in ("pending", "failed")
+                    and not con.execute(
+                        "SELECT 1 FROM coach_chunks WHERE id=?", (chunk_id,)
+                    ).fetchone()
+                ):
+                    upsert(
+                        con,
+                        chunk_id,
+                        "conversation",
+                        message.get("context_date", date.today().isoformat()),
+                        "User said (unverified conversation): " + message.get("text", ""),
+                    )
         self._consolidate_workout_days()
         with self.connect() as con:
             self._supersede_workout_previews(con)
@@ -328,6 +365,7 @@ class Store:
                 if day in seen:
                     self._archive_workout(con, entry_id, data)
                     con.execute("DELETE FROM entries WHERE id=?", (entry_id,))
+                    con.execute("DELETE FROM coach_chunks WHERE id=?", ("entry:" + entry_id,))
                 else:
                     seen.add(day)
 
@@ -508,6 +546,7 @@ class Store:
                     archived.add(old_id)
                     if old_id != entry_id:
                         con.execute("DELETE FROM entries WHERE id=?", (old_id,))
+                        con.execute("DELETE FROM coach_chunks WHERE id=?", ("entry:" + old_id,))
                 if original and entry_id not in archived and original[0] == "workout":
                     self._archive_workout(con, entry_id, original[1])
             entry_id = entry_id or uuid.uuid4().hex
@@ -515,17 +554,22 @@ class Store:
                 "INSERT OR REPLACE INTO entries VALUES (?, ?, ?)",
                 (entry_id, kind, json.dumps(data)),
             )
+            from .semantic_index import journal_chunk
+
+            journal_chunk(con, entry_id, kind, data)
         return dict(data, id=entry_id, kind=kind)
 
     def delete(self, entry_id):
         with self.connect() as con:
             con.execute("DELETE FROM entries WHERE id=?", (entry_id,))
+            con.execute("DELETE FROM coach_chunks WHERE id=?", ("entry:" + entry_id,))
             con.execute("DELETE FROM workout_revisions WHERE entry_id=?", (entry_id,))
 
     def reset(self):
         """Clear personal journal data atomically; retain only the internal demo seed marker."""
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
+            con.execute("DELETE FROM coach_chunks WHERE category!='exercise'")
             for table in ("entries", "workout_revisions", "messages", "drafts"):
                 con.execute(f"DELETE FROM {table}")
             con.execute("DELETE FROM settings WHERE key != 'demo_initialized'")
@@ -581,7 +625,20 @@ class Store:
                 con.execute("UPDATE messages SET data=? WHERE id=?", (json.dumps(data), message_id))
 
     def complete_chat_request(self, message_id, user, response):
+        from .semantic_index import upsert
+
         with self.connect() as con:
+            # Quoted conversation is recall evidence, never a journal observation or instruction.
+            upsert(
+                con,
+                "conversation:" + str(message_id),
+                "conversation",
+                user.get("context_date", date.today().isoformat()),
+                "User said: "
+                + user["text"]
+                + "\nCoach replied (unverified conversation): "
+                + response["text"][:2000],
+            )
             user = {**user, "status": "sent"}
             con.execute("UPDATE messages SET data=? WHERE id=?", (json.dumps(user), message_id))
             con.execute(
@@ -594,10 +651,23 @@ class Store:
                 "INSERT INTO messages(role,data) VALUES (?,?)", (role, json.dumps(data))
             ).lastrowid
 
+    def coach_state(self, key="task", value=None):
+        setting = "coach_" + key
+        with self.connect() as con:
+            if value is not None:
+                con.execute(
+                    "INSERT OR REPLACE INTO settings VALUES (?,?)", (setting, json.dumps(value))
+                )
+                return value
+            row = con.execute("SELECT data FROM settings WHERE key=?", (setting,)).fetchone()
+        return json.loads(row[0]) if row else {}
+
     def start_chat(self):
         """Archive the current conversation and exclude it from future model history."""
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
+            con.execute("DELETE FROM settings WHERE key IN ('coach_task','coach_scope')")
+            con.execute("DELETE FROM coach_chunks WHERE category='conversation'")
             last_id = con.execute("SELECT COALESCE(MAX(id),0) FROM messages").fetchone()[0]
             con.execute(
                 "INSERT OR REPLACE INTO settings VALUES ('chat_start_id', ?)",
@@ -608,6 +678,7 @@ class Store:
                 "INSERT OR REPLACE INTO settings VALUES ('chat_hidden_drafts', ?)",
                 (json.dumps(hidden),),
             )
+            con.execute("UPDATE drafts SET status='dismissed' WHERE status='pending'")
 
     def chat_hidden_drafts(self):
         with self.connect() as con:
@@ -724,6 +795,13 @@ class Store:
                 "This preview is no longer pending. It was approved, replaced or reverted."
             )
         items = self._draft_items(row[0], edited if edited is not None else json.loads(row[1]))
+        task = con.execute("SELECT data FROM settings WHERE key='coach_task'").fetchone()
+        if task:
+            task = json.loads(task[0])
+            if task.get("draft_id") == draft_id and task.get("incomplete"):
+                raise ValueError(
+                    "Resolve the highlighted workout questions before approving this preview."
+                )
         if row[2] and row[2] != "{}" and self._baseline(con, items) != row[2]:
             raise ValueError(
                 "This day changed after the preview was prepared. Ask the coach to prepare a fresh preview before approving."

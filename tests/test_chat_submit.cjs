@@ -75,6 +75,7 @@ const code = source.slice(
   for (const starter of starters) {
     ctx.prepareCoachMessage(starter.prompt);
     assert.equal(input.value, starter.prompt);
+    assert.equal(ctx.chatLoggingKind, null, "task shortcuts leave logging intent to the request");
     assert.equal(ctx.chatComposerDraft, starter.prompt);
   }
   assert.equal(calls, 0, "choosing a card only prepares an editable message");
@@ -98,7 +99,7 @@ const code = source.slice(
     submitted = 0;
   ctx.document = {
     addEventListener: (type, listener) => {
-      keydown = listener;
+      if (type === "keydown") keydown = listener;
     },
   };
   const queryBeforeKeys = ctx.$;

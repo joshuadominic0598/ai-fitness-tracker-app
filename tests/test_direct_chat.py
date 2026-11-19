@@ -62,10 +62,10 @@ class DirectChatTests(unittest.TestCase):
         with patch.object(
             self.coach, "generate", side_effect=ProviderError("Quota reached")
         ) as generate:
-            with self.assertRaises(ProviderError):
-                self.coach.chat("Hi", True)
+            result = self.coach.chat("Hi", True)
+            self.assertTrue(result["recovered"])
         generate.assert_called_once()
-        self.assertEqual(self.store.messages()[0]["status"], "failed")
+        self.assertEqual(self.store.messages()[0]["status"], "sent")
 
     def test_older_messages_remain_available_to_scroll(self):
         for index in range(45):

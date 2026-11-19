@@ -16,7 +16,7 @@ def select_skills(message, focus=""):
         item for item in ranked if any(word in query for word in item["keywords"])
     ][:3]
     if len(selected) == 1:
-        selected.append(next(item for item in MANIFEST if item["id"] == "full_body"))
+        selected.append(next(item for item in MANIFEST if item["id"] == "strength"))
     return [{**item, "content": (ROOT / (item["id"] + ".md")).read_text()} for item in selected]
 
 

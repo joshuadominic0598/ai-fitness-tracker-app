@@ -73,7 +73,7 @@ class WorkoutPreviewTests(unittest.TestCase):
         }
         with patch.object(self.coach, "generate", return_value=reply) as generate:
             result = self.coach.chat(SCREENSHOT_NOTE, True, "2026-11-15")
-        self.assertEqual(generate.call_count, 2)
+        generate.assert_not_called()
         data = result["draft"]["data"]
         self.assertEqual(data["date"], "2026-11-16")
         self.assertEqual(
@@ -116,7 +116,7 @@ class WorkoutPreviewTests(unittest.TestCase):
                     self.coach, "generate", side_effect=ProviderError("HTTP 503")
                 ) as generate:
                     result = self.coach.chat(note, True, "2026-11-16")
-                self.assertEqual(generate.call_count, count // 5)
+                generate.assert_not_called()
                 self.assertEqual(len(result["draft"]["data"]["exercises"]), count)
                 self.assertEqual(
                     sum(len(e["sets"]) for e in result["draft"]["data"]["exercises"]), count * 2
@@ -143,7 +143,7 @@ class WorkoutPreviewTests(unittest.TestCase):
         ):
             result = self.coach.chat(note, True, "2026-11-16")
         self.assertEqual(len(result["draft"]["data"]["exercises"]), 15)
-        self.assertTrue(result["notices"])
+        self.assertEqual(result["notices"], [])
 
     def test_unmatched_and_missing_quantities_are_visible_beside_valid_sets(self):
         note = "Log my workout:\nHammer curl 10kg 8 reps\nMystery zorble machine 12kg 9 reps\nBench press 20kg"
@@ -219,7 +219,7 @@ class WorkoutPreviewTests(unittest.TestCase):
         ):
             answer = self.coach.chat("What is a machine plate?", True)
         self.assertNotIn("draft", answer)
-        self.assertEqual(len(self.store.drafts()), 1)
+        self.assertEqual(len(self.store.drafts()), 0)
 
     def test_small_input_budget_subdivides_batches_without_losing_sets(self):
         self.connections.save({"context_budget_tokens": 2500})

@@ -40,7 +40,7 @@ Follow your strength over time and see which movements you return to. Protein an
 
 ## A coach you can talk to, on your computer
 
-Type your workout or meal, or use the microphone beside **Send** to record your voice. Local speech recognition turns audio into editable text in the message box. Check it, make any corrections, then press **Send**. The local **Qwen** coach can suggest exercise matches, estimate protein, help plan a session, and explain your progress.
+Type your workout or meal, or use the microphone beside **Send** to record your voice. Local speech recognition turns audio into editable text in the message box. Check it, make any corrections, then press **Send**. The local **Qwen** coach can suggest exercise matches, estimate protein, help plan a session, and explain your progress. It streams progress stages while preparing its answer, preserves pending previews during corrections, and asks about uncertain exercise matches. Exercise and journal retrieval use a local SQLite vector index with **EmbeddingGemma**; approved records are indexed as they change.
 
 Long workout notes are handled in smaller batches. You get a preview to review, correct and approve before anything becomes a saved journal entry. Unclear details stay visible so you can fill them in. A new-chat button gives you a fresh conversation when you need one.
 
@@ -76,6 +76,7 @@ flowchart LR
 
    ```sh
    ollama pull qwen3:8b
+   ollama pull embeddinggemma
    ```
 
 3. Get the app and start it:

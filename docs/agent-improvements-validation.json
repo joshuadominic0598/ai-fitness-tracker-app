@@ -1,0 +1,128 @@
+{
+  "date": "2026-11-19",
+  "branch": "codex/agent-improvements",
+  "committed": true,
+  "merged": false,
+  "python_tests": 208,
+  "javascript_suites": 20,
+  "ruff_check": "passed",
+  "ruff_format": "passed",
+  "git_diff_check": "passed",
+  "browser": {
+    "engine": "Headless Brave / Chromium",
+    "desktop_viewport": [
+      1440,
+      1100
+    ],
+    "mobile_viewport": [
+      390,
+      844
+    ],
+    "javascript_errors": 0,
+    "workout_sets_preserved": 23,
+    "incomplete_approval_disabled": true,
+    "topic_change_cancels_preview": true
+  },
+  "local_models": {
+    "chat": "qwen3:8b",
+    "embeddings": "embeddinggemma:latest",
+    "exercise_vectors_verified": 874
+  },
+  "live_response_seconds": {
+    "lesson": 19.875,
+    "meal": 9.655,
+    "assessment": 8.213,
+    "first_stage": 0.002
+  },
+  "limitations": [
+    "Timings are observed samples, not a hardware-independent guarantee.",
+    "Streaming displays workflow stages, followed by the validated final response.",
+    "Public video search was intermittent; fallback YouTube search links were verified."
+  ],
+  "journal_validation": "Automated tests use disposable journals; browser checks do not save personal journal entries.",
+  "logging_timeout_regression": {
+    "date": "2026-11-17",
+    "specific_workout_overrides_any_flag": true,
+    "mode_prompt_does_not_override_completed_sets": true,
+    "local_embedding_workout_preview_seconds": 0.961,
+    "all_sets_after_confirmations": 23,
+    "failed_request_resume_without_duplicate_turn": true,
+    "actual_app_preview_seconds": 1.671,
+    "clarification_seconds": 0.709,
+    "actual_app_date": "2026-11-17",
+    "actual_app_sets": 23,
+    "failed_bubble_recovered": true,
+    "status_at_validation": "Pending approval"
+  },
+  "live_long_generation": {
+    "food_items": 8,
+    "seconds": 31.995,
+    "progress_interval_seconds": 3,
+    "result": "Validated meal draft; no entry saved"
+  },
+  "response_limits": {
+    "target_seconds": 30,
+    "per_model_step_max_seconds": 120,
+    "turn_work_max_seconds": 180,
+    "recoverable_model_failures": "Assistant clarification with retained preview instead of failed-message error"
+  },
+  "dashboard_and_logging_updates": {
+    "desktop_viewport": [
+      1440,
+      810
+    ],
+    "mobile_viewport": [
+      390,
+      844
+    ],
+    "tablet_default": 1,
+    "manual_and_historical_quantities_preserved": true,
+    "new_workout_starts_empty": true,
+    "search_adds_fresh_sets": true,
+    "explicit_recent_recall_preserved": true,
+    "personal_records_columns": 5,
+    "hybrid_search": "Local dense vectors plus fuzzy keyword ranking; tracked/body-part filters",
+    "typo_queries_verified": [
+      "hamer curls",
+      "seeted cabel row",
+      "dumbell bicep curll",
+      "pec deck"
+    ],
+    "live_search_retrieval": "semantic + fuzzy keyword",
+    "warm_live_search_seconds": 0.084,
+    "sleep_and_intake_charts": "Thick lines, visible focusable points and chart-data tables",
+    "overview_order": [
+      "Calendar and habit heatmap",
+      "Six horizontal consistency metrics",
+      "Weekly goals"
+    ],
+    "compact_sections": [
+      "Exercise library",
+      "Progress & insights",
+      "Set goals"
+    ],
+    "desktop_section_heading_top_px": 104,
+    "full_body_map_note_visible": true,
+    "mobile_horizontal_overflow": false,
+    "browser_javascript_errors": 0,
+    "journal_writes_by_ui_checks": false
+  },
+  "habit_day_details": {
+    "content": [
+      "Workout summary and primary focus areas",
+      "Protein total and meal count",
+      "Creatine total including legacy logs",
+      "Supplements and logged quantities",
+      "Sleep total, night sleep, naps and known uninterrupted stretch"
+    ],
+    "rest_days": "Distinct teal cells and Rest day label; no workout logged is explicit",
+    "missing_logs": "Not logged",
+    "hover_and_keyboard_focus": true,
+    "escape_dismisses": true,
+    "hoverable_popup": true,
+    "viewport_edge_checks": true,
+    "click_and_mobile_navigation_preserved": true,
+    "javascript_errors": 0,
+    "journal_writes": false
+  }
+}

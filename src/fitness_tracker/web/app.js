@@ -69,6 +69,8 @@ let bodyMapMode = "week",
   bodyMapDate = "";
 let recordExercise = "",
   recordBodyPart = "";
+let recordSearchQuery = "", recordRankedIds = null, recordSuggestionsOpen = false;
+const exerciseSearchCache = new Map(), exerciseSearchVersions = {}, exerciseSearchTimers = {};
 const image = (id) => `/assets/exercises/${encodeURIComponent(id)}.webp`;
 const dateObj = (d) => new Date(d + "T12:00:00");
 const dateLabel = (d, options = { month: "short", day: "numeric" }) =>
@@ -114,7 +116,32 @@ async function api(path, data) {
             body: JSON.stringify(data),
           },
     );
-    const result = await response.json();
+    let result;
+    if (response.ok && response.headers?.get("Content-Type")?.includes("application/x-ndjson")) {
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      let buffer = "", final;
+      const consume = (line) => {
+        if (!line.trim()) return;
+        const event = JSON.parse(line);
+        if (event.type === "stage") {
+          chatStage = event.message;
+          if ($("#chat-generation-status")) $("#chat-generation-status").textContent = chatStage;
+        } else if (event.type === "final") final = event.response;
+        else if (event.type === "error") throw Error(event.message);
+      };
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split("\n"); buffer = lines.pop();
+          lines.forEach(consume);
+          if (done) break;
+        }
+        consume(buffer);
+      } finally { reader.releaseLock(); }
+      if (!final) throw Error("The response stream ended early. Your message is retained; reconnect to recover it.");
+      result = final;
+    } else result = await response.json();
     // Only this explicit pre-dispatch rejection can be safely replayed.
     // Network failures, provider errors and other 403s are never retried here.
     if (
@@ -133,6 +160,7 @@ async function api(path, data) {
 
 async function refresh(renderPage = true) {
   state = await api("state");
+  if (typeof exerciseSearchCache !== "undefined") exerciseSearchCache.clear();
   reconcileAiPreview();
   journalDate ||= state.today;
   $("#demo-badge").innerHTML = state.demo
@@ -194,7 +222,7 @@ function chart(
     let segment = [];
     const draw = () => {
       if (segment.length > 1)
-        svg += `<polyline points="${segment.join(" ")}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+        svg += `<polyline points="${segment.join(" ")}" fill="none" stroke="${color}" stroke-width="4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>`;
       segment = [];
     };
     data.forEach((d, i) => {
@@ -210,7 +238,7 @@ function chart(
     if (d.value !== null && d.value !== undefined) {
       const title = esc(`${d.label}: ${n(d.value)} ${unit}`);
       if (line)
-        svg += `<circle cx="${x(i)}" cy="${y(d.value)}" r="4" fill="${color}"><title>${title}</title></circle>`;
+        svg += `<circle cx="${x(i)}" cy="${y(d.value)}" r="5" fill="${color}" stroke="#171225" stroke-width="2" tabindex="0" aria-label="${title}"><title>${title}</title></circle>`;
       else {
         let bw = Math.min((w / data.length) * 0.55, 25);
         svg += `<rect x="${x(i) - bw / 2}" y="${y(d.value)}" width="${bw}" height="${Math.max(0, top + h - y(d.value))}" rx="3" fill="${color}"><title>${title}</title></rect>`;
@@ -259,11 +287,83 @@ function heatmap() {
   return `<div class="heatmap">${Object.entries(state.insights.daily)
     .map(
       ([d, v]) =>
-        `<div class="heat-cell ${v.workouts ? "done" : ""} ${v.workouts > 1 ? "multi" : ""} ${d === state.today ? "today" : ""}" title="${d}: ${v.workouts} workouts" role="img" aria-label="${d}: ${v.workouts} workouts"></div>`,
+        `<button type="button" class="heat-cell ${v.workouts ? "done" : "rest"} ${v.workouts > 1 ? "multi" : ""} ${d === state.today ? "today" : ""}" data-action="activity-day" data-date="${d}" aria-label="${d}: ${v.workouts ? v.workouts + " workout" + (v.workouts === 1 ? "" : "s") : "Rest day, no workout logged"}. View day details or open in Track"></button>`,
     )
     .join(
       "",
-    )}</div><div class="heat-labels"><span>12 weeks ago</span><span>Each square is a day</span><span>Today</span></div>`;
+    )}</div><div class="heat-labels"><span>12 weeks ago</span><span>Each square is a day</span><span>Today</span></div><div class="habit-legend"><span><i class="gym-day" aria-hidden="true"></i>Workout day</span><span><i class="rest-day" aria-hidden="true"></i>Rest day · no workout logged</span></div>`;
+}
+function habitDayDetails(day) {
+  const entries = state.entries.filter(entry => entry.date === day);
+  const workouts = entries.filter(entry => entry.kind === "workout");
+  const exercises = workouts.flatMap(entry => entry.exercises || []);
+  const areas = Object.values(BodyMap.summarize(workouts, byId).areas)
+    .filter(area => area.primary > 0)
+    .sort((a, b) => b.primary - a.primary)
+    .map(area => area.name);
+  const meals = entries.filter(entry => entry.kind === "meal");
+  const creatine = entries.filter(GoalTracking.isCreatine);
+  const supplements = entries.filter(entry => entry.kind === "supplement" && !GoalTracking.isCreatine(entry));
+  const sleep = sleepSummary(entries);
+  const row = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  const workout = workouts.length
+    ? `${exercises.length} exercise${exercises.length === 1 ? "" : "s"} · ${exercises.reduce((sum, exercise) => sum + (exercise.sets || []).length, 0)} sets`
+    : "No workout logged";
+  const protein = meals.length
+    ? `${n(meals.reduce((sum, entry) => sum + entry.protein, 0))} g · ${meals.length} meal${meals.length === 1 ? "" : "s"}`
+    : "Not logged";
+  const creatineText = creatine.length ? `${n(creatine.reduce((sum, entry) => sum + entry.amount, 0))} g` : "Not logged";
+  const supplementsText = supplements.length
+    ? supplements.map(entry => `<span>${esc(entry.name)} · ${n(entry.amount)} ${esc(entry.unit)}</span>`).join("")
+    : "Not logged";
+  const sleepText = sleep.logs.length
+    ? `${n(sleep.total)} h total · ${n(sleep.night)} h night${sleep.total > sleep.night ? ` · ${n(sleep.total - sleep.night)} h naps` : ""}${sleep.known ? `<span>${n(sleep.continuous)} h uninterrupted</span>` : ""}`
+    : "Not logged";
+  return `<div class="habit-day-heading"><h3>${esc(dateLabel(day, { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}</h3><span class="habit-day-badge ${workouts.length ? "gym-day" : "rest-day"}">${workouts.length ? "Workout day" : "Rest day"}</span></div><dl>${row("Workout", workout)}${workouts.length ? row("Focus areas", areas.length ? esc(areas.join(" · ")) : "Not specified") : ""}${row("Protein", protein)}${row("Creatine", creatineText)}${row("Supplements", supplementsText)}${row("Sleep", sleepText)}</dl><p>Click the day to open Track.</p>`;
+}
+let habitTooltipCell = null, habitTooltipTimer;
+function hideHabitDetails() {
+  clearTimeout(habitTooltipTimer);
+  habitTooltipCell?.removeAttribute("aria-describedby");
+  habitTooltipCell = null;
+  $("#habit-day-tooltip")?.remove();
+}
+function deferHideHabitDetails() {
+  clearTimeout(habitTooltipTimer);
+  habitTooltipTimer = setTimeout(() => {
+    if (document.activeElement !== habitTooltipCell && !$("#habit-day-tooltip")?.matches(":hover")) hideHabitDetails();
+  }, 120);
+}
+function showHabitDetails(cell) {
+  clearTimeout(habitTooltipTimer);
+  if (habitTooltipCell === cell) return;
+  hideHabitDetails();
+  habitTooltipCell = cell;
+  const tooltip = document.createElement("div");
+  tooltip.id = "habit-day-tooltip";
+  tooltip.className = "habit-day-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.innerHTML = habitDayDetails(cell.dataset.date);
+  document.body.append(tooltip);
+  cell.setAttribute("aria-describedby", tooltip.id);
+  positionHabitDetails(cell, tooltip);
+}
+function positionHabitDetails(cell, tooltip) {
+  const anchor = cell.getBoundingClientRect(), box = tooltip.getBoundingClientRect();
+  const clampX = value => Math.max(12, Math.min(value, window.innerWidth - box.width - 12));
+  const clampY = value => Math.max(12, Math.min(value, window.innerHeight - box.height - 12));
+  let left = clampX(anchor.left + anchor.width / 2 - box.width / 2);
+  const below = anchor.bottom + 10;
+  let top;
+  if (below + box.height <= window.innerHeight - 12) top = below;
+  else if (anchor.top - box.height - 10 >= 12) top = anchor.top - box.height - 10;
+  else {
+    top = clampY(anchor.top + anchor.height / 2 - box.height / 2);
+    if (anchor.right + box.width + 22 <= window.innerWidth) left = anchor.right + 10;
+    else if (anchor.left - box.width - 10 >= 12) left = anchor.left - box.width - 10;
+  }
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${clampY(top)}px`;
 }
 function dayEntries() {
   const entries = journalEntries().filter((e) => e.date === journalDate);
@@ -328,7 +428,7 @@ function sleepInsights() {
               ? null
               : v.sleep[key],
         })),
-      { goal, unit: "h", label },
+      { goal, unit: "h", label, line: true },
     );
   return `<section class="card section-space" aria-label="Sleep insights"><div class="card-head"><div><h2>Your sleep rhythm</h2><p>Naps and that night’s sleep belong to the same rest day · last 14 days</p></div><button class="link" data-page="goals">Set sleep targets ↗</button></div><div class="sleep-insight-grid"><div><h3>Total rest · ${n(state.profile.sleep_goal)} h/day</h3>${series("hours", state.profile.sleep_goal, "Daily total rest hours")}</div><div><h3>Night sleep · ${n(state.profile.night_hours_goal)} h/night</h3>${series("night_hours", state.profile.night_hours_goal, "Total night sleep hours")}</div><div><h3>Uninterrupted stretch · ${n(state.profile.night_sleep_goal)} h personal goal</h3>${series("night_continuous", state.profile.night_sleep_goal, "Longest uninterrupted night stretch")}</div></div><p class="muscle-note">Consistency uses total rest and total night sleep. Brief wake-ups do not remove your night hours. Your uninterrupted-stretch goal is tracked separately, with no score penalty. Unknown continuity stays unrecorded.</p></section>`;
 }
@@ -546,7 +646,7 @@ function insightsBodyMap() {
 }
 function dailyJournal() {
   const d = dayEntries();
-  return `<section class="card daily-journal" aria-label="Daily workout and nutrition journal"><div class="card-head journal-heading"><div><h2>${esc(sessionTitle(journalDate))}</h2></div><div class="journal-tools"><div class="actions journal-date-controls">${button("←", "journal-prev", "secondary", 'aria-label="Previous journal day"')}<label class="journal-date-label" for="journal-date">Journal date<input id="journal-date" type="date" min="1900-01-01" max="2050-12-31" required value="${journalDate}" aria-label="Journal date"></label>${button("→", "journal-next", "secondary", 'aria-label="Next journal day"')}${button("Today", "journal-today", "soft")}</div>${button(icon("coach") + " Log using AI", "ai-log-chooser")}</div></div><div class="grid equal"><div class="journal-panel"><div class="card-head"><div><h3>Your workout</h3><p>${d.workouts.length} session${d.workouts.length === 1 ? "" : "s"} · ${d.workouts.reduce((n, e) => n + e.exercises.reduce((s, x) => s + x.sets.length, 0), 0)} sets</p></div><div class="actions">${button(icon("plus") + (d.workouts.length ? " Edit workout" : " Log workout"), "new-workout")}</div></div>${dayPlan()}${d.workouts.length ? d.workouts.map(dayWorkout).join("") : empty("Make room for movement", "Your workout for this day will appear here.")}${verificationFooter("workout")}</div><div class="journal-side"><section class="journal-panel journal-creatine" aria-label="Creatine tracking"><div class="card-head"><div><h3>Creatine</h3><p>${n(d.creatine)} g logged</p></div>${button(icon("plus") + " Log creatine", "new-creatine")}</div>${d.creatineEntries.length ? d.creatineEntries.map((e) => `<div class="list-row"><span class="row-icon">${icon("drop")}</span><div class="row-main">${n(e.amount)} g${e.notes ? ` · ${esc(e.notes)}` : ""}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No creatine logged for this day.</p>'}${verificationFooter("creatine")}</section><section class="journal-panel journal-supplements" aria-label="Supplement tracking"><div class="card-head"><h3>Supplements</h3><div class="actions">${button(icon("plus") + " Log supplement", "new-supplement")}</div></div>${d.supplements.length ? d.supplements.map((e) => `<div class="list-row"><div class="row-main">${esc(e.name)} · ${n(e.amount)} ${esc(e.unit)}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No supplements logged for this day.</p>'}${verificationFooter("supplement")}</section><div class="journal-panel journal-food"><div class="card-head"><div><h3>Protein</h3><p>${n(d.protein)} g protein</p></div><div class="actions">${button(icon("plus") + " Log food", "new-meal")}</div></div>${d.meals.length ? d.meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${activeAiPreview?.entries.some((entry) => entry.id === e.id) ? "AI preview · awaiting approval" : e.source === "ai" ? "Approved AI estimate" : "Manually logged"}</p></div><strong>${n(e.protein)} <small class="muted">g</small></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled this day?", "Add food here without leaving your workout journal.")}${verificationFooter("meal")}</div>${sleepJournal()}${
+  return `<section class="card daily-journal" aria-label="Daily workout and nutrition journal"><div class="card-head journal-heading"><div><h2>${esc(sessionTitle(journalDate))}</h2></div><div class="journal-tools"><div class="actions journal-date-controls">${button("←", "journal-prev", "secondary", 'aria-label="Previous journal day"')}<label class="journal-date-label" for="journal-date">Journal date<input id="journal-date" type="date" min="1900-01-01" max="2050-12-31" required value="${journalDate}" aria-label="Journal date"></label>${button("→", "journal-next", "secondary", 'aria-label="Next journal day"')}${button("Today", "journal-today", "soft")}</div>${button(icon("coach") + " Log using AI", "ai-log-chooser")}</div></div><div class="grid equal"><div class="journal-panel"><div class="card-head"><div><h3>Your workout</h3><p>${d.workouts.length} session${d.workouts.length === 1 ? "" : "s"} · ${d.workouts.reduce((n, e) => n + e.exercises.reduce((s, x) => s + x.sets.length, 0), 0)} sets</p></div><div class="actions">${button(icon("plus") + (d.workouts.length ? " Edit workout" : " Log workout"), d.workouts.length ? "edit-entry" : "new-workout", "primary", d.workouts.length ? `data-id="${d.workouts[0].id}"` : "")}</div></div>${dayPlan()}${d.workouts.length ? d.workouts.map(dayWorkout).join("") : empty("Make room for movement", "Your workout for this day will appear here.")}${verificationFooter("workout")}</div><div class="journal-side"><section class="journal-panel journal-creatine" aria-label="Creatine tracking"><div class="card-head"><div><h3>Creatine</h3><p>${n(d.creatine)} g logged</p></div>${button(icon("plus") + " Log creatine", "new-creatine")}</div>${d.creatineEntries.length ? d.creatineEntries.map((e) => `<div class="list-row"><span class="row-icon">${icon("drop")}</span><div class="row-main">${n(e.amount)} g${e.notes ? ` · ${esc(e.notes)}` : ""}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No creatine logged for this day.</p>'}${verificationFooter("creatine")}</section><section class="journal-panel journal-supplements" aria-label="Supplement tracking"><div class="card-head"><h3>Supplements</h3><div class="actions">${button(icon("plus") + " Log supplement", "new-supplement")}</div></div>${d.supplements.length ? d.supplements.map((e) => `<div class="list-row"><div class="row-main">${esc(e.name)} · ${n(e.amount)} ${esc(e.unit)}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No supplements logged for this day.</p>'}${verificationFooter("supplement")}</section><div class="journal-panel journal-food"><div class="card-head"><div><h3>Protein</h3><p>${n(d.protein)} g protein</p></div><div class="actions">${button(icon("plus") + " Log food", "new-meal")}</div></div>${d.meals.length ? d.meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${activeAiPreview?.entries.some((entry) => entry.id === e.id) ? "AI preview · awaiting approval" : e.source === "ai" ? "Approved AI estimate" : "Manually logged"}</p></div><strong>${n(e.protein)} <small class="muted">g</small></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled this day?", "Add food here without leaving your workout journal.")}${verificationFooter("meal")}</div>${sleepJournal()}${
     activeAiPreview?.entries.some(
       (e) => e.kind === "body" && e.date === journalDate,
     )
@@ -701,7 +801,7 @@ function overview() {
         },
       )
     : "";
-  return `<div class="dashboard-head">${head("YOUR FITNESS, AT A GLANCE", `Keep your fire going${state.profile.name ? ", " + esc(state.profile.name) : ""}.`, "Your consistency, your habits, your progress.", `<button class="btn" data-page="track">${icon("plus")} Track your day</button>`)}</div><div class="dashboard-grid"><section class="card dashboard-calendar" id="dashboard-activity">${activityCalendarInner()}</section><aside class="dashboard-summary">${consistencyScores(true)}</aside></div>${weeklyGoalsPanel()}${nutritionMetrics("overview-intake")}${body}${dashboardScoreTrend()}`;
+  return `<div class="dashboard-grid"><section class="card dashboard-calendar" id="dashboard-activity">${activityCalendarInner()}</section><aside class="card dashboard-habit" aria-label="Training habits"><div class="card-head"><div><h2>The habit of showing up</h2><p>Your training days over the last 12 weeks</p></div></div>${heatmap()}</aside></div><div class="overview-metrics">${consistencyScores(true)}</div>${weeklyGoalsPanel()}${nutritionMetrics("overview-intake")}${body}${dashboardScoreTrend()}`;
 }
 function track() {
   const history = state.entries
@@ -851,12 +951,12 @@ function exerciseRecords() {
   );
   const areas = (id) => byId[id]?.bodyParts || byId[id]?.primaryMuscles || [];
   const parts = [...new Set(allIds.flatMap(areas))].sort();
-  const ids = allIds.filter(
+  const ids = (recordSearchQuery && recordRankedIds ? recordRankedIds.filter(id => allIds.includes(id)) : allIds).filter(
     (id) =>
       (!recordExercise || recordExercise === id) &&
       (!recordBodyPart || areas(id).includes(recordBodyPart)),
   );
-  return `<section class="card records-card" aria-label="All exercise records"><div class="card-head records-heading"><div><h2>Your exercises & personal records</h2><p>Every tracked exercise · most trained first · all time</p></div><div class="pr-filters"><label>Exercise<select id="pr-exercise-filter" aria-label="Filter PRs by exercise"><option value="">All exercises</option>${allIds.map((id) => `<option value="${esc(id)}" ${recordExercise === id ? "selected" : ""}>${esc(byId[id]?.name || id)}</option>`).join("")}</select></label><label>Body part<select id="pr-body-filter" aria-label="Filter PRs by body part"><option value="">All body parts</option>${parts.map((part) => `<option value="${esc(part)}" ${recordBodyPart === part ? "selected" : ""}>${esc(part)}</option>`).join("")}</select></label><span class="pill" role="status">${ids.length}${ids.length !== allIds.length ? ` / ${allIds.length}` : ""} EXERCISES</span></div></div>${
+  return `<section class="card records-card" aria-label="All exercise records"><div class="card-head records-heading"><div><h2>Your exercises & personal records</h2><p>Every tracked exercise · most trained first · all time</p></div><div class="pr-filters"><div class="pr-search-field"><label for="pr-exercise-filter">Exercise<input type="search" id="pr-exercise-filter" maxlength="200" aria-label="Filter PRs by exercise" role="combobox" aria-autocomplete="list" aria-controls="pr-exercise-options" aria-expanded="${recordSuggestionsOpen}" autocomplete="off" placeholder="Type an exercise, muscle or equipment…" value="${esc(recordSearchQuery)}"></label><div id="pr-exercise-options" class="pr-search-options" role="listbox" ${recordSuggestionsOpen ? "" : "hidden"}>${ids.slice(0, 8).map(id => `<button type="button" role="option" aria-selected="${recordExercise === id}" data-action="filter-pr-exercise" data-id="${esc(id)}"><img src="${image(id)}" alt=""><span>${esc(byId[id]?.name || id)}</span></button>`).join("") || '<p class="small muted">No tracked matches yet.</p>'}</div></div><label>Body part<select id="pr-body-filter" aria-label="Filter PRs by body part"><option value="">All body parts</option>${parts.map((part) => `<option value="${esc(part)}" ${recordBodyPart === part ? "selected" : ""}>${esc(part)}</option>`).join("")}</select></label><span class="pill" role="status">${ids.length}${ids.length !== allIds.length ? ` / ${allIds.length}` : ""} EXERCISES</span></div></div>${
     ids.length
       ? `<div class="pr-card-scroll" role="region" aria-label="Exercise PR cards" tabindex="0"><div class="pr-card-grid">${ids
           .map((id) => {
@@ -886,9 +986,51 @@ function exerciseRecords() {
   }</section>`;
 }
 function updateExerciseRecords(focusId) {
+  const previous = focusId ? $(`#${focusId}`) : null;
+  const selection = previous?.type === "search" ? [previous.selectionStart, previous.selectionEnd] : null;
   const section = $(".records-card");
   if (section) section.outerHTML = exerciseRecords();
-  if (focusId) $(`#${focusId}`)?.focus();
+  if (focusId) {
+    const control = $(`#${focusId}`);
+    control?.focus();
+    if (control?.type === "search" && selection) control.setSelectionRange?.(...selection);
+  }
+}
+async function rankedExerciseSearch(query, { tracked = false, bodyPart = "" } = {}) {
+  const key = JSON.stringify([query.trim().toLowerCase(), tracked, bodyPart]);
+  if (exerciseSearchCache.has(key)) return exerciseSearchCache.get(key);
+  const params = new URLSearchParams({ q: query.trim(), limit: tracked ? "100" : "30", tracked: tracked ? "1" : "0", body_part: bodyPart });
+  const result = await api("exercise-search?" + params);
+  const ids = result.items.map(item => item.id).filter(id => byId[id]);
+  if (exerciseSearchCache.size >= 100) exerciseSearchCache.clear();
+  exerciseSearchCache.set(key, ids);
+  return ids;
+}
+function scheduleExerciseSearch(target, query) {
+  clearTimeout(exerciseSearchTimers[target]);
+  const version = (exerciseSearchVersions[target] || 0) + 1;
+  exerciseSearchVersions[target] = version;
+  if (!query.trim()) return;
+  exerciseSearchTimers[target] = setTimeout(async () => {
+    try {
+      const ids = await rankedExerciseSearch(query, { tracked: target === "records", bodyPart: target === "records" ? recordBodyPart : "" });
+      if (exerciseSearchVersions[target] !== version) return;
+      if (target === "records" && $(".records-card") && recordSearchQuery === query) {
+        recordRankedIds = ids;
+        updateExerciseRecords(document.activeElement?.id === "pr-exercise-filter" ? "pr-exercise-filter" : null);
+      } else if (target === "picker" && $("#picker-search")?.value === query) {
+        $("#picker-results").innerHTML = pickerResults(query, ids.map(id => byId[id]));
+      }
+    } catch { /* Existing local keyword results stay available during an index restart. */ }
+  }, 220);
+}
+function searchExerciseRecords(query) {
+  recordSearchQuery = query;
+  recordExercise = "";
+  recordRankedIds = query.trim() ? exerciseMatches(query).map(ex => ex.id) : null;
+  recordSuggestionsOpen = Boolean(query.trim());
+  updateExerciseRecords("pr-exercise-filter");
+  scheduleExerciseSearch("records", query);
 }
 function resetDialog() {
   modal(
@@ -968,7 +1110,7 @@ function progress() {
     sleepInsights() +
     nutritionMetrics() +
     `<div class="grid cols-2"><div class="card" id="strength-chart-card"><div class="card-head"><div><h2>Your strength, over time</h2><p>Monthly best logged ${metric === "kg" ? "load" : metric} · last 12 months</p></div><span class="pill gold">PERSONAL RECORDS</span></div>${ids.length ? `<select id="pr-select" class="full-width" aria-label="Exercise for PR chart">${ids.map((id) => `<option value="${id}" ${id === prId ? "selected" : ""}>${esc(byId[id].name)}</option>`).join("")}</select><div class="section-space"><strong class="pr-value">${n(pr.weight || pr.reps || pr.seconds)} <small class="muted">${metric}</small></strong><p class="small muted">${pr.weight ? n(pr.reps) + " reps at your best load · " : ""}Best logged · ${dateLabel(metric === "seconds" ? pr.seconds_date || pr.date : pr.date, { month: "short", day: "numeric", year: "numeric" })}</p></div>${chart(months, { unit: metric, line: true, label: ex.name + " monthly personal record" })}${pr.estimated_1rm ? `<p class="muscle-note">Estimated 1RM: ${n(pr.estimated_1rm)} kg (Epley, sets of 1–10 reps). This estimate is separate from your actual best load.</p>` : ""}<p class="muscle-note">Weights are recorded per your chosen convention. Use the same convention for dumbbells and assisted machines. Empty months are gaps.</p>` : empty("Your first PR is ahead of you", "Log sets to see your best loads, reps and monthly changes.")}</div><div class="card"><div class="card-head"><div><h2>Your training balance</h2><p>Body-part sets · last 28 days</p></div></div>${muscles()}<p class="muscle-note">Volume alone does not measure growth. Use this to notice your training emphasis.</p></div></div>` +
-    `<div class="grid equal section-space"><div class="card" id="intake-panel">${intakePanel()}</div><div class="card"><div class="card-head"><div><h2>Exercises you come back to</h2><p>Sessions including each exercise · last 28 days</p></div></div>${frequency.length ? frequency.map(([id, count], i) => `<div class="list-row"><span class="pill">0${i + 1}</span><img src="${image(id)}" width="42" height="37" style="object-fit:contain" alt="${esc(byId[id].name)}"><div class="row-main"><h3>${esc(byId[id].name)}</h3><p>${esc((byId[id].bodyParts || byId[id].primaryMuscles).join(", "))}</p></div><strong>${count}<small class="muted"> sessions</small></strong></div>`).join("") : empty("Your favorites will find you", "Your most repeated exercises appear as you log sessions.")}</div></div><div class="grid equal section-space"><div class="card"><div class="card-head"><h2>The habit of showing up</h2></div>${heatmap()}</div><div class="card"><div class="card-head"><div><h2>Body weight journal</h2><p>Logged measurements · last 12 weeks</p></div>${button("+ Log", "new-body", "soft")}</div>${body.length ? chart(body, { unit: "kg", line: true, label: "Logged body weight" }) : empty("An optional piece of your story", "Add body weight measurements if this is useful for your goals.")}${
+    `<div class="grid equal section-space"><div class="card" id="intake-panel">${intakePanel()}</div><div class="card"><div class="card-head"><div><h2>Exercises you come back to</h2><p>Sessions including each exercise · last 28 days</p></div></div>${frequency.length ? frequency.map(([id, count], i) => `<div class="list-row"><span class="pill">0${i + 1}</span><img src="${image(id)}" width="42" height="37" style="object-fit:contain" alt="${esc(byId[id].name)}"><div class="row-main"><h3>${esc(byId[id].name)}</h3><p>${esc((byId[id].bodyParts || byId[id].primaryMuscles).join(", "))}</p></div><strong>${count}<small class="muted"> sessions</small></strong></div>`).join("") : empty("Your favorites will find you", "Your most repeated exercises appear as you log sessions.")}</div></div><div class="section-space"><div class="card"><div class="card-head"><div><h2>Body weight journal</h2><p>Logged measurements · last 12 weeks</p></div>${button("+ Log", "new-body", "soft")}</div>${body.length ? chart(body, { unit: "kg", line: true, label: "Logged body weight" }) : empty("An optional piece of your story", "Add body weight measurements if this is useful for your goals.")}${
       state.entries.some((e) => e.kind === "body")
         ? `<details><summary>View / edit measurements</summary>${state.entries
             .filter((e) => e.kind === "body")
@@ -1012,7 +1154,9 @@ function papersHtml(papers) {
     .join("");
 }
 function draftHtml(d, inChat = false) {
-  return `<div class="draft-card"><strong>Review your preview</strong><p>${d.kind === "batch" ? d.data.entries.length + " proposed entries" : "Proposed " + esc(d.kind)} · not saved yet</p>${inChat ? '<p class="small muted">Review the list above. Tell your coach what to change, or approve when everything looks right.</p>' : ""}<div class="actions">${inChat ? button(d.kind === "batch" ? "Approve & save all" : "Approve & save", "approve-chat-draft", "primary", `data-id="${d.id}"`) + button("Suggest changes", "change-preview", "soft", `data-id="${d.id}"`) : ""}${button(inChat ? "View in Track" : "Review in Track", "preview-ai-draft", "soft", `data-id="${d.id}"`)}${button("Revert", "dismiss-draft", "secondary", `data-id="${d.id}"`)}</div></div>`;
+  const entries = d.kind === "batch" ? d.data.entries : [{ data: d.data }];
+  const incomplete = entries.some(item => item.data.notes?.includes("Needs clarification (not included"));
+  return `<div class="draft-card"><strong>Review your preview</strong><p>${d.kind === "batch" ? d.data.entries.length + " proposed entries" : "Proposed " + esc(d.kind)} · not saved yet</p>${inChat ? '<p class="small muted">Review the list above. Tell your coach what to change, or approve when everything looks right.</p>' : ""}<div class="actions">${inChat ? button(d.kind === "batch" ? "Approve & save all" : "Approve & save", "approve-chat-draft", "primary", `data-id="${d.id}" ${incomplete ? 'disabled title="Resolve the highlighted questions before approval"' : ""}`) + button("Suggest changes", "change-preview", "soft", `data-id="${d.id}"`) : ""}${button(inChat ? "View in Track" : "Review in Track", "preview-ai-draft", "soft", `data-id="${d.id}"`)}${button("Revert", "dismiss-draft", "secondary", `data-id="${d.id}"`)}</div></div>`;
 }
 function agentDetails(message) {
   const a = message.agent;
@@ -1028,13 +1172,24 @@ function agentDetails(message) {
     )}</ul><p class="small muted">Input estimates: ${a.input_token_estimates.map(n).join(", ")}. Qwen checks the local context budget before generating.</p></details>`;
 }
 function chatText(text) {
-  return esc(text).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  const inline = (value) => esc(value)
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]\n]+)\]\((https:\/\/[^\s<>]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1 ↗</a>');
+  return String(text || "").split(/\n\s*\n/).map(block => {
+    const lines = block.split("\n");
+    if (lines.every(line => /^\s*\d+\.\s/.test(line)))
+      return `<ol>${lines.map(line => `<li>${inline(line.replace(/^\s*\d+\.\s*/, ""))}</li>`).join("")}</ol>`;
+    if (lines.every(line => /^\s*[-•]\s/.test(line)))
+      return `<ul>${lines.map(line => `<li>${inline(line.replace(/^\s*[-•]\s*/, ""))}</li>`).join("")}</ul>`;
+    return `<p>${lines.map(inline).join("<br>")}</p>`;
+  }).join("");
 }
 function messageHtml(m) {
   if (m.role === "user")
     return `<article class="message user" data-message-id="${esc(m.id || m.request_id || "")}"><div class="message-meta">YOU</div><p>${esc(m.text)}</p>${m.status === "pending" ? '<span class="chat-message-state">Sent · awaiting your coach</span>' : m.status === "failed" ? `<div class="chat-message-failure"><span>${esc(m.error || "Could not finish this answer.")}</span><button type="button" class="link" data-action="retry-chat" data-id="${esc(m.id || m.request_id)}">Try again</button></div>` : ""}</article>`;
   const draft = m.draft && state.drafts.find((d) => d.id === m.draft.id);
-  return `<div class="message ${m.role === "user" ? "user" : ""}"><div class="message-meta">${m.role === "user" ? "YOU" : esc("YOUR COACH" + (m.provider ? " · " + m.provider : ""))}</div><p>${chatText(m.text)}</p>${draft ? draftHtml(draft, true) : ""}${m.approved ? `<div class="actions">${button("View in Track", "view-approved-track", "soft", `data-date="${esc(m.approved.date)}"`)}</div>` : ""}<details class="message-resources" ${!m.draft && !m.papers?.length && !m.citations?.length && !m.notices?.length && m.agent?.architecture !== "LangGraph" ? "hidden" : ""}><summary>Details</summary><div>${m.papers?.length ? `<details><summary>Sources retrieved · ${m.papers.length}</summary>${papersHtml(m.papers)}</details>` : ""}${m.agent ? agentDetails(m) : ""}${
+  return `<div class="message ${m.role === "user" ? "user" : ""}"><div class="message-meta">${m.role === "user" ? "YOU" : esc("YOUR COACH" + (m.provider ? " · " + m.provider : ""))}</div><div class="coach-message-body">${chatText(m.text)}</div>${draft ? draftHtml(draft, true) : ""}${m.approved ? `<div class="actions">${button("View in Track", "view-approved-track", "soft", `data-date="${esc(m.approved.date)}"`)}</div>` : ""}<details class="message-resources" ${!m.draft && !m.papers?.length && !m.citations?.length && !m.notices?.length && m.agent?.architecture !== "LangGraph" ? "hidden" : ""}><summary>Details</summary><div>${m.papers?.length ? `<details><summary>Sources retrieved · ${m.papers.length}</summary>${papersHtml(m.papers)}</details>` : ""}${m.agent ? agentDetails(m) : ""}${
     m.citations?.length
       ? `<div class="cited-sources">${m.citations
           .filter((url) => /^https?:\/\//.test(url))
@@ -1051,6 +1206,7 @@ function quotaSummary(provider, connections = state.connections) {
 }
 let chatLoggingKind = null,
   chatRevisionId = null;
+let chatStage = "Received. Understanding your request…";
 let chatResearchMode = false,
   chatComposerDraft = "",
   optimisticChat = null,
@@ -1114,7 +1270,7 @@ function syncChatThread(forceScroll = false) {
     $("#chat-generation-status").textContent =
       seconds > 0
         ? `Waiting ${seconds}s for provider limits, then continuing your answer…`
-        : "Your coach is preparing an answer…";
+        : chatStage;
   const submit = $("#chat-form [type=submit]");
   if (submit) {
     submit.disabled = chatIsBusy() || coachModelBusy;
@@ -1343,40 +1499,11 @@ async function testCoachConnection(provider, status) {
 }
 
 const coachStarters = [
-  {
-    title: "Estimate protein",
-    hint: "Describe your meal",
-    icon: "nutrition",
-    prompt: "Estimate the protein in this meal, with a realistic range: ",
-  },
-  {
-    title: "Build a routine",
-    hint: "What do you want to grow?",
-    icon: "workouts",
-    prompt:
-      "Suggest an exercise or routine for what I want to grow. My goal is: ",
-  },
-  {
-    title: "Plan a session",
-    hint: "Choose a day & exercise list",
-    icon: "calendar",
-    prompt:
-      "Plan an exercise-only session for the selected journal day. My focus and equipment: ",
-  },
-  {
-    title: "Learn an exercise",
-    hint: "Form, steps & common mistakes",
-    icon: "exercises",
-    prompt:
-      "Help me learn this exercise with simple steps, form cues and common mistakes: ",
-  },
-  {
-    title: "Assess my progress",
-    hint: "Strengths & areas to improve",
-    icon: "progress",
-    prompt:
-      "Assess my workouts, nutrition, creatine, supplements, sleep and other tracked data. Explain my strong and weak areas and suggest what to prioritize. Distinguish missing data from actual weaknesses. Extra context: ",
-  },
+  { title: "Log/Plan Workout", hint: "Choose a day · review before saving", icon: "workouts", prompt: "Help me log or plan my workout. " },
+  { title: "Protein/Creatine", hint: "Estimate food or log your intake", icon: "nutrition", prompt: "Help me with protein or creatine. " },
+  { title: "Supplements/Sleep Logging", hint: "Use your goals and preferred units", icon: "sleep", prompt: "Help me log supplements or sleep. " },
+  { title: "Learn an exercise", hint: "Steps, cues, mistakes & a short video", icon: "exercises", prompt: "Help me learn this exercise with simple steps, form cues and common mistakes: " },
+  { title: "Assess my progress", hint: "Workouts · intake & recovery", icon: "progress", prompt: "Assess my progress" },
 ];
 function coachPromptCards() {
   return `<div class="coach-starters" role="group" aria-label="Start a conversation">${coachStarters.map((starter) => `<button type="button" class="coach-starter" data-prompt="${esc(starter.prompt)}">${icon(starter.icon)}<span><strong>${esc(starter.title)}</strong><small>${esc(starter.hint)}</small></span></button>`).join("")}</div>`;
@@ -1423,7 +1550,7 @@ function updateChatVoiceControls() {
   if (submit) submit.disabled = chatIsBusy() || coachModelBusy || voiceInput.isBusy();
 }
 function coach() {
-  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}${coachPromptCards()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="5" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div></div>`;
+  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="5" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
 }
 function goalProgress(key, reference = journalDate) {
   return GoalTracking.progress(
@@ -1570,6 +1697,18 @@ function supplementLogUnit(name) {
       : "capsule";
 }
 
+function syncSupplementAmount(preserveExisting = false) {
+  const amount = $("#entry-amount"), unit = $("#entry-unit");
+  if (!amount || !unit || preserveExisting || amount.dataset.manual) return;
+  if (/^tablets?$/i.test(unit.value.trim())) {
+    if (!amount.value || amount.dataset.default === "true") {
+      amount.value = "1"; amount.dataset.default = "true";
+    }
+  } else if (amount.dataset.default === "true") {
+    amount.value = ""; delete amount.dataset.default;
+  }
+}
+
 let supplementUnitRequest = 0;
 async function refreshSupplementUnit(preserveExisting = false) {
   const form = $("#simple-entry-form"),
@@ -1584,6 +1723,7 @@ async function refreshSupplementUnit(preserveExisting = false) {
     const name = $("#entry-name").value;
     if (!preserveExisting && !unit.dataset.manual && name && name !== "__new__")
       unit.value = supplementLogUnit(name);
+    syncSupplementAmount(preserveExisting);
   } catch {
     /* Cached goals remain usable if a background refresh fails. */
   }
@@ -1656,6 +1796,7 @@ function fitChatViewport() {
 }
 window.addEventListener("resize", fitChatViewport);
 function render() {
+  hideHabitDetails();
   voiceInput.cancel();
   page = location.hash.slice(1) || "overview";
   if (["journal", "workouts", "nutrition"].includes(page)) {
@@ -1665,6 +1806,8 @@ function render() {
   if (!pages[page] && page !== "settings") page = "overview";
   document.body.classList.toggle("coach-page", page === "coach");
   document.body.classList.toggle("dashboard-page", page === "overview");
+  document.body.classList.toggle("progress-page", page === "progress");
+  document.body.classList.toggle("compact-section-page", ["exercises", "progress", "goals"].includes(page));
   document.body.classList.toggle("tracking-page", page === "track");
   $("#page-label").textContent = pages[page] || "Settings & connections";
   $("#nav").innerHTML = Object.entries(pages)
@@ -1770,7 +1913,7 @@ function simpleForm(kind, entry = {}, draft = null) {
       ]),
     ].filter((name) => name.toLowerCase() !== "creatine");
     const chosen = entry.name || options[0];
-    body += `<div class="field"><label for="entry-name">Supplement</label><select class="full-width" id="entry-name" name="name" required><option value="">Select a supplement</option>${options.map((name) => `<option value="${esc(name)}" ${name === chosen ? "selected" : ""}>${esc(name)}</option>`).join("")}<option value="__new__">+ Add a new supplement…</option></select></div><div class="custom-supplement-box" id="custom-supplement-box" hidden><label for="new-supplement-name">New supplement name</label><div class="actions"><input id="new-supplement-name" maxlength="100" placeholder="e.g. Magnesium" autocomplete="off">${button("Save to my list", "save-supplement-option", "soft")}</div><p class="small muted">Saved names stay in your selection list for future logs.</p></div><div class="form-grid">${field("Amount", "amount", entry.amount ?? "", "number", 'required min="0.001" max="100000" step="0.001"')}${field("Unit", "unit", entry.unit || supplementLogUnit(chosen), "text", 'required maxlength="20"')}</div>`;
+    body += `<div class="field"><label for="entry-name">Supplement</label><select class="full-width" id="entry-name" name="name" required><option value="">Select a supplement</option>${options.map((name) => `<option value="${esc(name)}" ${name === chosen ? "selected" : ""}>${esc(name)}</option>`).join("")}<option value="__new__">+ Add a new supplement…</option></select></div><div class="custom-supplement-box" id="custom-supplement-box" hidden><label for="new-supplement-name">New supplement name</label><div class="actions"><input id="new-supplement-name" maxlength="100" placeholder="e.g. Magnesium" autocomplete="off">${button("Save to my list", "save-supplement-option", "soft")}</div><p class="small muted">Saved names stay in your selection list for future logs.</p></div><div class="form-grid">${field("Amount", "amount", entry.amount ?? (/^tablets?$/i.test(entry.unit || supplementLogUnit(chosen)) ? 1 : ""), "number", 'required min="0.001" max="100000" step="0.001"' + (entry.amount == null && /^tablets?$/i.test(entry.unit || supplementLogUnit(chosen)) ? ' data-default="true"' : ""))}${field("Unit", "unit", entry.unit || supplementLogUnit(chosen), "text", 'required maxlength="20"')}</div>`;
   }
   if (kind === "creatine")
     body +=
@@ -1835,34 +1978,7 @@ function simpleForm(kind, entry = {}, draft = null) {
 function openWorkout(kind = "workout", entry = {}, draft = null) {
   formDraft = draft;
   const day = entry.date || journalDate || state.today;
-  const sameDay =
-    kind === "workout" && !entry.id
-      ? state.entries.find((e) => e.kind === "workout" && e.date === day)
-      : null;
-  const previous =
-    kind === "workout" && !entry.id && !sameDay && entry.exercises === undefined
-      ? WorkoutHistory.latestWorkout(state.entries, day)
-      : null;
-  let source = entry;
-  if (sameDay) {
-    source = { ...sameDay };
-    if (entry.exercises)
-      source.exercises = [
-        ...sameDay.exercises,
-        ...entry.exercises.filter(
-          (item) =>
-            !sameDay.exercises.some(
-              (existing) => existing.exercise_id === item.exercise_id,
-            ),
-        ),
-      ];
-  } else if (previous)
-    source = {
-      ...previous,
-      id: undefined,
-      date: day,
-      _copied_from: previous.date,
-    };
+  const source = entry;
   workoutForm = JSON.parse(
     JSON.stringify({
       ...source,
@@ -1921,7 +2037,7 @@ function usualPicker() {
               selected = workoutForm.exercises.some(
                 (e) => e.exercise_id === item.id,
               );
-            return `<button type="button" class="usual-exercise ${selected ? "selected" : ""}" data-action="pick-exercise" data-id="${item.id}" ${selected ? "disabled" : ""}><img src="${image(item.id)}" alt=""><span>${esc(ex.name)}<small>${item.count} sessions · ${selected ? "Added ✓" : workoutForm.kind === "plan" ? "Add exercise +" : "Use last entry +"}</small></span></button>`;
+            return `<button type="button" class="usual-exercise ${selected ? "selected" : ""}" data-action="pick-exercise" data-recall="true" data-id="${item.id}" ${selected ? "disabled" : ""}><img src="${image(item.id)}" alt=""><span>${esc(ex.name)}<small>${item.count} sessions · ${selected ? "Added ✓" : workoutForm.kind === "plan" ? "Add exercise +" : "Use last entry +"}</small></span></button>`;
           })
           .join("")}</div>`
       : '<p class="small muted">Your regular exercises will appear here after you log workouts.</p>'
@@ -1961,7 +2077,17 @@ function workoutSetRow(item, i, j) {
       item.load_mode === "bodyweight"
         ? [item.tracking === "time" ? "seconds" : "reps"]
         : ["weight", item.tracking === "time" ? "seconds" : "reps"];
-  return `<div class="set-row metric-${keys.length}"><span>${j + 1}</span>${keys.map((key) => `<input type="number" value="${set[key] || 0}" min="${key === "weight" ? 0 : 1}" max="${key === "seconds" ? 86400 : 1000}" step="${key === "weight" ? "0.5" : "1"}" data-set="${i}:${j}:${key}" aria-label="${esc(ex.name)} set ${j + 1} ${key}" required>`).join("")}<button type="button" class="remove" data-action="remove-set" data-index="${i}" data-set-index="${j}" aria-label="Remove ${esc(ex.name)} set ${j + 1}">×</button></div>`;
+  return `<div class="set-row metric-${keys.length}"><span>${j + 1}</span>${keys.map((key) => {
+    const label = `${esc(ex.name)} set ${j + 1} ${key}`;
+    return `<div class="set-number"><input type="number" value="${set[key] || (key === "weight" ? 0 : "")}" min="${key === "weight" ? 0 : 1}" max="${key === "seconds" ? 86400 : 1000}" step="${key === "weight" ? "any" : "1"}" data-set="${i}:${j}:${key}" aria-label="${label}" required><div class="set-number-arrows"><button type="button" data-action="step-set" data-direction="1" aria-label="Increase ${label} by 1">▴</button><button type="button" data-action="step-set" data-direction="-1" aria-label="Decrease ${label} by 1">▾</button></div></div>`;
+  }).join("")}<button type="button" class="remove" data-action="remove-set" data-index="${i}" data-set-index="${j}" aria-label="Remove ${esc(ex.name)} set ${j + 1}">×</button></div>`;
+}
+function stepWorkoutNumber(input, direction) {
+  const current = Number.isFinite(input.valueAsNumber) ? input.valueAsNumber : 0;
+  input.value = String(Math.min(Number(input.max), Math.max(Number(input.min),
+    Number((current + direction).toFixed(6)))));
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 function drawWorkout(preservePosition = true) {
   const f = workoutForm;
@@ -1990,7 +2116,7 @@ function drawWorkout(preservePosition = true) {
       ? "Plans stay separate from completed workouts. All sets are editable."
       : f.id
         ? "Edit this day’s workout. Save changes updates this day instead of adding another entry."
-        : "Your last session is a starting point. Adjust every set to what you do this day.",
+        : "Start with an empty workout. Add a recent exercise or search for something new.",
     `<form id="workout-form"><div class="form-grid">${field("Date", "date", f.date, "date", "required")}${field("Session duration · minutes", "duration", f.duration, "number", 'min="0" max="1440" step="1"')}</div>${f._copied_from ? `<div class="notice section-space">Prefilled from ${esc(sessionTitle(f._copied_from))}. Review and edit before saving.</div>` : f.id && f.kind === "workout" ? '<div class="notice section-space">One workout per day. Saving replaces this day’s current information.</div>' : ""}<div class="picker section-space">${usualPicker()}<label for="picker-search" class="section-space">ADD AN EXERCISE · SEARCH ${catalog.length} MOVEMENTS</label><input id="picker-search" placeholder="Search by exercise, muscle or equipment" autocomplete="off"><div class="picker-results" id="picker-results">${pickerResults("")}</div></div>${exercisesHtml}<div class="field section-space"><label for="entry-notes">Session notes, progression, how you felt</label><textarea id="entry-notes" name="notes" maxlength="4000">${esc(f.notes)}</textarea></div>${f.id ? `<div class="actions">${button("Copy as a plan", "copy-plan", "soft")}${f.kind === "plan" ? button("Start this workout", "start-current-plan", "soft") : ""}</div>` : ""}${entryFooter(f.id, formDraft)}</form>`,
     workoutOptions(),
     preservePosition,
@@ -1999,11 +2125,11 @@ function drawWorkout(preservePosition = true) {
     if (!event.currentTarget.open) resetWorkoutOptions();
   });
 }
-function pickerResults(query) {
+function pickerResults(query, matches = null) {
   if (!query.trim())
     return '<p class="small muted">Search the full library to add something new.</p>';
   return (
-    exerciseMatches(query)
+    (matches || exerciseMatches(query))
       .slice(0, 12)
       .map((ex) => {
         const selected = workoutForm.exercises.some(
@@ -2037,7 +2163,7 @@ async function saveConnection(service) {
 function prepareCoachMessage(message) {
   voiceInput.cancel();
   chatComposerDraft = message;
-  chatLoggingKind = "any";
+  chatLoggingKind = null;
   chatRevisionId = null;
   const options = $(".chat-options");
   if (options) options.open = false;
@@ -2049,7 +2175,7 @@ function prepareCoachMessage(message) {
   }
 }
 
-async function sendChat(event, approvalId = null) {
+async function sendChat(event, approvalId = null, retryRequestId = null) {
   event.preventDefault();
   if (chatIsBusy()) return;
   const input = $("#chat-input"),
@@ -2078,7 +2204,7 @@ async function sendChat(event, approvalId = null) {
     error.textContent = "Enter a message for your coach.";
     return;
   }
-  const request_id = crypto.randomUUID();
+  const request_id = retryRequestId || crypto.randomUUID();
   const logging_kind = chatLoggingKind,
     revise_draft_id = chatRevisionId;
   const research =
@@ -2097,6 +2223,7 @@ async function sendChat(event, approvalId = null) {
     logging_kind,
     revise_draft_id,
   };
+  chatStage = "Received. Understanding your request…";
   chatBusy = true;
   if (!approvalId) {
     input.value = "";
@@ -2108,6 +2235,7 @@ async function sendChat(event, approvalId = null) {
   try {
     const reply = await api("chat", {
       message,
+      stream: true,
       request_id,
       date: journalDate,
       research,
@@ -2229,7 +2357,15 @@ async function action(name, el) {
       );
       break;
     }
+    case "filter-pr-exercise":
+      recordExercise = id; recordSearchQuery = byId[id].name;
+      recordRankedIds = [id]; recordSuggestionsOpen = false;
+      exerciseSearchVersions.records = (exerciseSearchVersions.records || 0) + 1;
+      updateExerciseRecords("pr-exercise-filter");
+      break;
     case "clear-pr-filters":
+      recordSearchQuery = ""; recordRankedIds = null; recordSuggestionsOpen = false;
+      exerciseSearchVersions.records = (exerciseSearchVersions.records || 0) + 1;
       recordExercise = "";
       recordBodyPart = "";
       updateExerciseRecords("pr-exercise-filter");
@@ -2251,7 +2387,7 @@ async function action(name, el) {
         $("#chat-input").value = message.text;
         chatComposerDraft = message.text;
         resizeChatComposer();
-        await sendChat({ preventDefault() {} });
+        await sendChat({ preventDefault() {} }, null, message.request_id);
       }
       break;
     }
@@ -2452,22 +2588,19 @@ async function action(name, el) {
     case "exercise-detail":
       detailExercise(id);
       break;
-    case "pick-exercise":
+    case "pick-exercise": {
       syncWorkout();
-      if (!workoutForm.exercises.some((e) => e.exercise_id === id))
-        workoutForm.exercises.push(
-          workoutForm.kind === "plan"
-            ? { exercise_id: id }
-            : WorkoutHistory.makeExercise(
-                state.entries,
-                id,
-                workoutForm.date,
-                byId,
-                workoutForm.id,
-              ),
-        );
+      if (!workoutForm.exercises.some((e) => e.exercise_id === id)) {
+        let item = { exercise_id: id };
+        if (workoutForm.kind !== "plan") {
+          item = WorkoutHistory.makeExercise(el.dataset.recall === "true" ? state.entries : [], id, workoutForm.date, byId, workoutForm.id);
+          if (el.dataset.recall !== "true") item.sets = [{ weight: 0, reps: 0, seconds: 0 }];
+        }
+        workoutForm.exercises.push(item);
+      }
       drawWorkout();
       break;
+    }
     case "request-blank-workout":
       confirmWorkoutReplace("blank-workout");
       break;
@@ -2724,13 +2857,51 @@ async function action(name, el) {
           ? "Help me estimate the protein in my meal. I ate "
           : name === "ask-plan"
             ? `Plan an exercise-only session for ${journalDate}, based on my goals and recent sessions. My focus: `
-            : "Look at my progress and training patterns. What should I prioritize next?",
+            : "Assess my progress",
       );
       location.hash = "coach";
       break;
   }
 }
+document.addEventListener("pointerover", event => {
+  if (event.pointerType === "touch") return;
+  const cell = event.target.closest(".heat-cell[data-date]");
+  if (cell) showHabitDetails(cell);
+  else if (event.target.closest("#habit-day-tooltip")) clearTimeout(habitTooltipTimer);
+});
+document.addEventListener("pointerout", event => {
+  if (event.target.closest(".heat-cell, #habit-day-tooltip")) deferHideHabitDetails();
+});
+document.addEventListener("focusin", event => {
+  const cell = event.target.closest(".heat-cell[data-date]");
+  if (cell) showHabitDetails(cell);
+});
+document.addEventListener("focusout", event => {
+  if (event.target.closest(".heat-cell")) deferHideHabitDetails();
+});
+document.addEventListener("scroll", event => {
+  const tooltip = $("#habit-day-tooltip");
+  if (!habitTooltipCell || !tooltip || tooltip.contains(event.target)) return;
+  const anchor = habitTooltipCell.getBoundingClientRect();
+  if (anchor.bottom < 0 || anchor.top > window.innerHeight) hideHabitDetails();
+  else positionHabitDetails(habitTooltipCell, tooltip);
+}, true);
+window.addEventListener("resize", hideHabitDetails);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && habitTooltipCell) {
+    event.preventDefault();
+    event.stopPropagation();
+    hideHabitDetails();
+  }
+}, true);
 document.addEventListener("click", (event) => {
+  const step = event.target.closest('[data-action="step-set"]');
+  if (step) {
+    const input = step.closest(".set-number").querySelector("input");
+    stepWorkoutNumber(input, Number(step.dataset.direction));
+    input.focus({ preventScroll: true });
+    return;
+  }
   const chatOptions = $(".chat-options");
   if (chatOptions?.open && !chatOptions.contains(event.target))
     chatOptions.open = false;
@@ -2753,6 +2924,30 @@ document.addEventListener("click", (event) => {
 document.addEventListener(
   "keydown",
   (event) => {
+    if (event.target.matches?.("input[data-set]") &&
+        ["ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      stepWorkoutNumber(event.target, event.key === "ArrowUp" ? 1 : -1);
+      return;
+    }
+    const prOptions = $("#pr-exercise-options");
+    if (event.target.id === "pr-exercise-filter" || event.target.closest?.("#pr-exercise-options")) {
+      if (event.key === "Escape" && recordSuggestionsOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        recordSuggestionsOpen = false;
+        updateExerciseRecords("pr-exercise-filter");
+        return;
+      }
+      if (["ArrowDown", "ArrowUp"].includes(event.key) && prOptions && !prOptions.hidden) {
+        const options = [...prOptions.querySelectorAll("button")];
+        const current = options.indexOf(event.target);
+        const next = current < 0 ? (event.key === "ArrowDown" ? 0 : options.length - 1) : current + (event.key === "ArrowDown" ? 1 : -1);
+        event.preventDefault();
+        options[(next + options.length) % options.length]?.focus();
+        return;
+      }
+    }
     if (
       event.target.id === "chat-input" &&
       event.key === "Enter" &&
@@ -2775,6 +2970,11 @@ document.addEventListener(
   },
   true,
 );
+// Blur before the browser's native wheel stepping, allowing the page to scroll.
+document.addEventListener("wheel", (event) => {
+  const input = event.target.closest?.('input[type="number"]');
+  if (input === document.activeElement) input.blur();
+}, { capture: true, passive: true });
 document.addEventListener("input", (event) => {
   const el = event.target;
   if (el.id === "chat-input") {
@@ -2784,14 +2984,18 @@ document.addEventListener("input", (event) => {
   if (el.id === "coach-custom-model") updateCoachConnectionState();
   if (el.id === "ai-log-input" && $("#ai-log-form"))
     $("#ai-log-form").dataset.requestId = "";
-  if (el.id === "entry-unit") el.dataset.manual = "true";
+  if (el.id === "entry-unit") { el.dataset.manual = "true"; syncSupplementAmount(); }
+  if (el.id === "entry-amount") { el.dataset.manual = "true"; delete el.dataset.default; }
   if (el.id === "exercise-search") {
     libraryQuery = el.value;
     libraryPage = 0;
     $("#library-results").innerHTML = libraryResults();
   }
-  if (el.id === "picker-search")
+  if (el.id === "picker-search") {
     $("#picker-results").innerHTML = pickerResults(el.value);
+    scheduleExerciseSearch("picker", el.value);
+  }
+  if (el.id === "pr-exercise-filter") searchExerciseRecords(el.value);
 });
 document.addEventListener("change", (event) => {
   if (event.target.classList?.contains("review-date")) {
@@ -2802,10 +3006,13 @@ document.addEventListener("change", (event) => {
     return;
   }
   if (["pr-exercise-filter", "pr-body-filter"].includes(event.target.id)) {
-    if (event.target.id === "pr-exercise-filter")
-      recordExercise = event.target.value;
-    else recordBodyPart = event.target.value;
+    if (event.target.id === "pr-exercise-filter") {
+      const exact = Object.keys(state.insights.prs).find(id => byId[id]?.name.toLowerCase() === event.target.value.toLowerCase());
+      if (exact) { recordExercise = exact; recordSuggestionsOpen = false; }
+      else return;
+    } else recordBodyPart = event.target.value;
     updateExerciseRecords(event.target.id);
+    if (recordSearchQuery && !recordExercise) scheduleExerciseSearch("records", recordSearchQuery);
     return;
   }
   if (event.target.id === "activity-metric") {
@@ -2887,6 +3094,7 @@ document.addEventListener("change", (event) => {
     else {
       $("#entry-unit").dataset.manual = "";
       $("#entry-unit").value = supplementLogUnit(el.value);
+      syncSupplementAmount();
       refreshSupplementUnit();
     }
   }

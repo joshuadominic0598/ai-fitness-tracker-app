@@ -12,7 +12,7 @@ python3 scripts/start.py
 
 `start.py` creates `.venv-agent` and installs the project dependencies on first use. On Windows, use `py -3 scripts/start.py`. The Mac and Windows launchers call the same bootstrap. Python, Git and Ollama are installed separately; the bootstrap does not change system settings or download the Qwen model automatically.
 
-Open Ollama and run `ollama pull qwen3:8b` for coaching. If Ollama isn't running, start the Ollama desktop app or run `ollama serve`. The app accepts only loopback Ollama addresses and local Qwen models. Qwen3 8B is the default; a smaller installed Qwen model can be selected in Settings on a computer with less memory. There is no automatic model or remote fallback.
+Open Ollama and run `ollama pull qwen3:8b` for coaching and `ollama pull embeddinggemma` for local semantic retrieval. If Ollama isn't running, start the Ollama desktop app or run `ollama serve`. The app accepts only loopback Ollama addresses and local Qwen models. Qwen3 8B is the default; a smaller installed Qwen model can be selected in Settings on a computer with less memory. There is no automatic model or remote fallback.
 
 To install directly instead:
 
@@ -64,3 +64,7 @@ Run each `tests/test_*.cjs` file with Node 22+ as well. CI runs Python 3.10 and 
 - `workout_notes.py`, `exercise_matching.py`, `workout_preview.py`: source quantities, library matching, batching and partial previews.
 - `web/`: browser interface, charts, date controls and workout editing.
 - `scripts/start.py`: portable first-run setup and launcher.
+
+See [Coach workflow](COACH_WORKFLOW.md) for pending-task state, local retrieval, context boundaries and streamed responses.
+
+Exercise pickers and the personal-record filter use `/api/exercise-search` for ranked local vector and fuzzy keyword matches. The endpoint accepts `q`, `limit` (1–100), `tracked=1`, and `body_part`; it returns exercise IDs with scores. Keyword results remain available if local embeddings are unavailable. New manual workouts start empty; recent-exercise buttons explicitly recall past sets, while search adds fresh, unfilled sets.

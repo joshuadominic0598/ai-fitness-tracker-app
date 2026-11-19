@@ -13,10 +13,12 @@ const helpers = source.slice(
 (async () => {
   const form = {},
     unit = { value: "g", dataset: {} },
+    amount = { value: "", dataset: {} },
     select = { value: "Collagen" };
   const elements = {
     "#simple-entry-form": form,
     "#entry-unit": unit,
+    "#entry-amount": amount,
     "#entry-name": select,
   };
   const fresh = {
@@ -38,12 +40,22 @@ const helpers = source.slice(
   resolve(fresh);
   await pending;
   assert.equal(unit.value, "tablet", "fresh goal unit replaces cached grams");
+  assert.equal(amount.value, "1", "tablet logs default to one without typing");
   assert.equal(ctx.supplementLogUnit("Creatine"), "g");
   select.value = "Magnesium";
   pending = ctx.refreshSupplementUnit();
   resolve(fresh);
   await pending;
   assert.equal(unit.value, "mg", "selection uses its own saved goal");
+  assert.equal(amount.value, "", "switching to measured dose removes the tablet default");
+  unit.value = "tablet";
+  amount.value = "2";
+  ctx.syncSupplementAmount(true);
+  assert.equal(amount.value, "2", "editing preserves the historical tablet count");
+  amount.dataset.manual = "true";
+  ctx.syncSupplementAmount();
+  assert.equal(amount.value, "2", "explicitly entered tablet counts stay intact");
+  delete amount.dataset.manual;
   unit.value = "capsule";
   pending = ctx.refreshSupplementUnit(true);
   resolve(fresh);

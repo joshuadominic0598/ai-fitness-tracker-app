@@ -105,6 +105,19 @@ GROUPS = [
 
 
 def clean_diary(value):
+    value = value.replace("\\.", ".").replace("&#x20;", " ")
+    value = re.sub(
+        r"^\s*(?:log|record|prepare)(?: my)?(?: completed)? workout(?: for [^:\n]+)?\s*:\s*",
+        "",
+        value,
+        flags=re.I | re.M,
+    )
+    value = re.sub(
+        r"^\s*Help me (?:log/plan|log or plan) my workout[.! ]*(?:\\)?\s*$",
+        "",
+        value,
+        flags=re.I | re.M,
+    )
     return re.sub(r"\[\d{1,2}/\d{1,2}/\d{2,4},[^\]]+\]\s*[^:\n]+:\s*", "", value)
 
 
@@ -227,15 +240,26 @@ def match_group(line):
 def movement_name(line):
     """Remove diary quantities without letting them dominate library retrieval."""
     line = re.sub(r"^\s*\d+[.)]\s*", "", line)
+    line = re.sub(
+        r"^(?:log|record|prepare)(?: my)?(?: completed)? workout(?: for \d{4}-\d{2}-\d{2})?\s*[:.\-]?\s*",
+        "",
+        line,
+        flags=re.I,
+    )
+    line = re.split(r",?\s+not\b", line, flags=re.I)[0]
     line = re.sub(r"\([^)]*\)", "", line)
+    line = re.sub(r"\b(?:exercise|excercise) is\b|\band time\b|\beach set.*", "", line, flags=re.I)
     line = re.sub(r"\b(?:then|and|warm[ -]?up|i did|did|like)\b", "", line, flags=re.I)
     line = re.sub(
-        r"\d+(?:\.\d+)?\s*(?:kg|reps?|sets?|seconds?|secs?|minutes?|mins?)?", "", line, flags=re.I
+        r"\d+(?:\.\d+)?\s*(?:kg|reps?|sets?|seconds?|secs?|minutes?|mins?|s|m)?",
+        "",
+        line,
+        flags=re.I,
     )
     return re.sub(r"[^a-z -]", " ", line.casefold()).strip()
 
 
-def inventory(value):
+def inventory(value, retriever=None):
     groups, current, unresolved, unsupported = {}, None, [], []
     cleaned = clean_diary(value)
     plate_loads = {
@@ -257,6 +281,17 @@ def inventory(value):
         quantity_line = re.sub(r"\([^)]*\b(?:either|each|per)\s+side[^)]*\)", "", line, flags=re.I)
         quantity_line = re.sub(r"^\s*\d+[.)]\s*", "", quantity_line)
         matched = match_group(line)
+        requires_confirmation = False
+        if (
+            not matched
+            and re.match(
+                r"^(?:log\b|prepare\b|keep every\b|ask me if\b|here (?:is|are)\b|set name\b|YOU\b)",
+                line,
+                re.I,
+            )
+            and not re.search(r"\d+\s*(?:kg|reps?|seconds?|secs?|mins?|s|m)\b", line, re.I)
+        ):
+            continue
         continuation = re.match(
             r"^(?:(?:then|and)\s+)?\d+(?:\.\d+)?\s*(?:kg|reps?)\b", quantity_line, re.I
         )
@@ -264,7 +299,18 @@ def inventory(value):
             from .exercise_matching import rank_exercises
 
             name = movement_name(line)
-            candidates = rank_exercises(name)
+            lexical = rank_exercises(name)
+            candidates = rank_exercises(name, retriever=retriever)
+            excluded = re.search(r"\bnot\s+([a-z-]+)", line, re.I)
+            if excluded:
+                from .store import EXERCISES
+
+                candidates = [
+                    eid
+                    for eid in candidates
+                    if excluded[1].lower() not in EXERCISES[eid]["name"].lower().split()
+                ]
+            requires_confirmation = bool(candidates and not lexical)
             if candidates:
                 matched = (name, "", candidates)
         if matched:
@@ -272,11 +318,15 @@ def inventory(value):
             if current in groups and groups[current]["candidates"] != matched[2]:
                 current += " (" + matched[2][0].replace("_", " ") + ")"
             groups.setdefault(current, {"label": current, "candidates": matched[2], "sets": []})
+            if requires_confirmation:
+                groups[current]["requires_confirmation"] = True
         if (
             not matched
             and not continuation
             and not re.match(
-                r"^(?:log\b|prepare\b|keep every\b|ask me if\b|here (?:is|are)\b|YOU\b)", line, re.I
+                r"^(?:log\b|prepare\b|keep every\b|ask me if\b|here (?:is|are)\b|set name\b|YOU\b)",
+                line,
+                re.I,
             )
         ):
             unsupported.append(line)
@@ -334,15 +384,15 @@ def inventory(value):
                 unresolved.append(
                     {"exercise": current, "source": line, "reason": "Repetitions are missing."}
                 )
-        elif re.search(r"\d+\s*(?:seconds?|secs?|minutes?|mins?)\b", quantity_line, re.I):
+        elif re.search(r"\d+\s*(?:seconds?|secs?|minutes?|mins?|s|m)\b", quantity_line, re.I):
             for amount, unit in re.findall(
-                r"(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?)\b", quantity_line, re.I
+                r"(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?|s|m)\b", quantity_line, re.I
             ):
                 groups[current]["sets"].append(
                     {
                         "weight": 0,
                         "reps": 0,
-                        "seconds": float(amount) * (60 if unit.lower().startswith("min") else 1),
+                        "seconds": float(amount) * (60 if unit.lower().startswith("m") else 1),
                         "source": line,
                     }
                 )

@@ -10,7 +10,7 @@ The upstream snapshot had 876 records. Three kettlebell records did not contain 
 
 The coach runs an installed Qwen model through [Ollama](https://ollama.com/), at a loopback address on the user's computer. Qwen3 8B is the default. Remote models and non-loopback addresses are rejected. There are no hosted-model integrations, API keys or provider fallbacks.
 
-Qwen returns structured proposals that the app validates independently. Workout quantities are grounded in the user's source notes, with batches of at most five movements. Ambiguous details remain visible in a partial preview. Meal estimates show assumptions and remain editable. Approval is an application action; the model cannot save a journal record by claiming it did so.
+Qwen returns structured proposals that the app validates independently. Explicit workout quantities are extracted and validated locally without asking the model to copy each set. Ambiguous details remain visible in a partial preview. Meal estimates show assumptions and remain editable. Approval is an application action; the model cannot save a journal record by claiming it did so.
 
 ## Research
 
@@ -20,7 +20,7 @@ A failed lookup is shown as unavailable. The coach is instructed to acknowledge 
 
 ## YouTube
 
-Exercise details provide an ordinary outbound YouTube search link using the catalog exercise name plus “exercise proper form tutorial”. Links open in a new tab only when selected. There is no YouTube API setup, API request, embedded player, remote thumbnail loading, or coach video search. The custom pull-up retains the user-supplied direct reference link. Legacy API credentials are removed from the local settings file.
+Exercise details provide an ordinary outbound YouTube search link using the catalog exercise name plus “exercise proper form tutorial”. Links open in a new tab only when selected. There is no YouTube API setup, API request, embedded player, remote thumbnail loading, or account connection. Coach lessons search public video metadata, prefer 30–60 second results when available, and provide an ordinary outbound link. A failed direct lookup falls back to a YouTube search link; a video is never claimed to have been watched. The custom pull-up retains the user-supplied direct reference link. Legacy API credentials are removed from the local settings file.
 
 ## Additional exercise variations
 
@@ -36,7 +36,7 @@ Its bundled photo reuses the public-domain `V-Bar_Pullup` image. The interface e
 
 ## Coaching skills, web search and calculator
 
-Eight versioned guides link to ACSM, WHO, ISSN/IUSCA, NIH and technique/recovery resources. [The skill index](COACH_SKILLS.md) records the sources, review date, scope and inference limits. Every research-mode coach turn attempts a generalized public web query using DDGS/Bing; official and primary sources are prioritized. If metasearch is unavailable, live Europe PMC search is labelled as a fallback. Query terms are restricted to general fitness vocabulary to avoid forwarding private names or numeric journal details. Both search failures and cached guide citations are labelled. The calculator evaluates a restricted numeric AST and cannot run Python code or access files.
+Seven versioned guides link to ACSM, WHO, ISSN/IUSCA, NIH and technique/recovery resources. [The skill index](COACH_SKILLS.md) records the sources, review date, scope and inference limits. Every research-mode coach turn attempts a generalized public web query using DDGS/Bing; official and primary sources are prioritized. If metasearch is unavailable, live Europe PMC search is labelled as a fallback. Query terms are restricted to general fitness vocabulary to avoid forwarding private names or numeric journal details. Both search failures and cached guide citations are labelled. The calculator evaluates a restricted numeric AST and cannot run Python code or access files.
 
 ## Food estimate references
 
