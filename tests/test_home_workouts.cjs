@@ -35,7 +35,6 @@ vm.runInContext(source.slice(source.indexOf("function homeWorkoutJournal("), sou
 const html = ctx.homeWorkoutJournal([home]);
 assert.match(html, /Home workouts/);
 assert.match(html, /1 session · 2 sets/);
-assert.match(html, /does not count as a gym day/);
 assert.match(html, /verify:home_workout/);
 assert.match(html, /data-action="new-home-workout"/);
 vm.runInContext(source.slice(source.indexOf("function heatmap("), source.indexOf("function habitDayDetails(")), ctx);

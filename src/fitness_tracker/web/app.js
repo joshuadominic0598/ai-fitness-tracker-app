@@ -660,7 +660,7 @@ function insightsBodyMap() {
 }
 function homeWorkoutJournal(entries) {
   const sets = entries.reduce((sum, e) => sum + e.exercises.reduce((total, ex) => total + ex.sets.length, 0), 0);
-  return `<section class="journal-home section-space" aria-label="Home workouts"><div class="card-head"><div><h3>Home workouts</h3><p>${entries.length} session${entries.length === 1 ? "" : "s"} · ${sets} set${sets === 1 ? "" : "s"}</p></div>${button(icon("home") + " Log home workout", "new-home-workout")}</div><p class="small muted">Bodyweight or weights, before or after the gym, or on another day. Adds to your body training and strength records; does not count as a gym day. Keep cardio separate.</p>${entries.length ? entries.map(dayWorkout).join("") : '<p class="small muted">A quick set counts too. Log push-ups, sit-ups, curls, presses and other strength exercises.</p>'}${verificationFooter("home_workout")}</section>`;
+  return `<section class="journal-home section-space" aria-label="Home workouts"><div class="card-head"><div><h3>Home workouts</h3><p>${entries.length} session${entries.length === 1 ? "" : "s"} · ${sets} set${sets === 1 ? "" : "s"}</p></div>${button(icon("home") + " Log home workout", "new-home-workout")}</div>${entries.length ? entries.map(dayWorkout).join("") : '<p class="small muted">No home workouts logged for this day.</p>'}${verificationFooter("home_workout")}</section>`;
 }
 function dailyJournal() {
   const d = dayEntries();
@@ -2015,11 +2015,11 @@ function simpleForm(kind, entry = {}, draft = null) {
         'required min="0" max="500" step="0.1"',
       ) +
       field(
-        "Calories · kcal",
+        "Calories · kcal (optional)",
         "calories",
         entry.calories ?? "",
         "number",
-        `${entry.id && entry.calories == null ? "" : "required"} min="0" max="10000" step="any"`,
+        'min="0" max="10000" step="any"',
       ) +
       (entry.id && entry.calories == null ? '<p class="small muted">Calories were not recorded for this older meal. Add an estimate when available; leaving it blank keeps it unknown.</p>' : "") +
       (entry.low !== undefined
