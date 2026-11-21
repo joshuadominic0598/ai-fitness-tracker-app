@@ -14,13 +14,20 @@ def meal():
         "date": "2026-02-01",
         "description": "Food A, Food B and topping",
         "protein": 15,
+        "calories": 300,
         "low": 13,
         "high": 17,
         "notes": "Synthetic portion assumptions.",
         "items": [
-            {"name": "Food A", "portion": "100 g cooked", "protein": 4},
-            {"name": "Food B", "portion": "1 piece", "protein": 5},
-            {"name": "Topping", "portion": "20 g", "protein": 6, "notes": "Assumed type."},
+            {"name": "Food A", "portion": "100 g cooked", "protein": 4, "calories": 100},
+            {"name": "Food B", "portion": "1 piece", "protein": 5, "calories": 120},
+            {
+                "name": "Topping",
+                "portion": "20 g",
+                "protein": 6,
+                "calories": 80,
+                "notes": "Assumed type.",
+            },
         ],
     }
 
@@ -38,6 +45,7 @@ class MealBreakdownTests(unittest.TestCase):
                     "name": "Milk",
                     "portion": "400 ml",
                     "protein": 13.2,
+                    "calories": 240,
                     "notes": "Assumed dairy milk.",
                 }
             )
@@ -141,7 +149,7 @@ class MealBreakdownTests(unittest.TestCase):
             "date": "2026-02-01",
             "description": "Meal with milk",
             "protein": 13.2,
-            "items": [{"name": "Milk", "portion": "400 ml", "protein": 13.2}],
+            "items": [{"name": "Milk", "portion": "400 ml", "protein": 13.2, "calories": 240}],
         }
         result = merge_revision(original, "meal", patch_data, "Add 400ml milk")
         self.assertEqual(result["entries"][1], original["data"]["entries"][1])
@@ -157,7 +165,9 @@ class MealBreakdownTests(unittest.TestCase):
         original["items"][0]["protein"] = 2
         proposed = meal()
         proposed["items"][1]["protein"] = 3  # Unrequested model drift.
-        proposed["items"].append({"name": "Milk", "portion": "400 ml", "protein": 13.2})
+        proposed["items"].append(
+            {"name": "Milk", "portion": "400 ml", "protein": 13.2, "calories": 240}
+        )
         proposed.update(protein=26.2, low=20, high=27)
         proposed.pop("low")
         proposed.pop("high")
@@ -193,7 +203,7 @@ class MealBreakdownTests(unittest.TestCase):
                 ) as request:
                     result = coach.chat("Log my meal for 2026-02-01", True, "2026-02-01")
                 self.assertIn(
-                    "items:[{name,portion,protein,notes}]", str(request.call_args.args[0])
+                    "items:[{name,portion,protein,calories,notes}]", str(request.call_args.args[0])
                 )
                 for food in meal()["items"]:
                     self.assertIn(

@@ -43,6 +43,14 @@
       value = logged ? 1 : 0;
       note = logged ? "Gym day logged" : "Rest day or no workout logged";
     }
+    if (metric === "cardio") {
+      const selected = rows.filter(e => e.kind === "cardio");
+      logged = selected.length > 0;
+      value = selected.reduce((sum, e) => sum + e.minutes * (e.intensity === "high" ? 2 : 1), 0);
+      target = ((profile.cardio_goal?.moderate || 0) + 2 * (profile.cardio_goal?.high || 0)) / 7;
+      note = selected.map(e => `${e.activity}: ${e.minutes} min, ${e.intensity}`).join(" · ") || "No cardio logged";
+      unit = "moderate-equivalent min";
+    }
     if (metric === "protein" || metric === "creatine") {
       const selected = rows.filter((e) =>
         metric === "protein"
@@ -190,6 +198,21 @@
         };
       });
       const elapsed = days.filter((d) => d.day <= today);
+      if (metric === "cardio") {
+        const progress = goals.cardioProgress(entries, profile.cardio_goal, start, today);
+        const hasTarget = progress.target > 0;
+        const weekLogged = elapsed.some(d => d.logged);
+        for (const d of days) {
+          const cumulative = goals.cardioProgress(entries, profile.cardio_goal, start, d.day < today ? d.day : today);
+          d.ratio = hasTarget && d.day <= today ? cumulative.value / progress.target : 0;
+          d.tone = d.day > today ? "future" : !hasTarget || !weekLogged ? "unlogged" : progress.percent >= 100 ? "met" : "building";
+          d.note = `${d.note}. ${cumulative.value} / ${progress.target} moderate-equivalent minutes for the week by this day.`;
+        }
+        return { start, end, days, percent: progress.percent,
+          note: `${progress.moderate} moderate + ${progress.high} high-intensity minutes. 1 high = 2 moderate. ${hasTarget ? `${progress.value} / ${progress.target} moderate-equivalent minutes.` : "No weekly cardio target set."}`,
+          inProgress: start <= today && end >= today,
+          tone: !hasTarget || !weekLogged ? "unlogged" : progress.percent >= 100 ? "met" : "building" };
+      }
       const logged = elapsed.some((d) => d.logged),
         future = !elapsed.length,
         inProgress = start <= today && end >= today;
@@ -405,10 +428,10 @@
   function intakeSeries(entries, metric, mode, today) {
     const points = new Map();
     for (const entry of entries) {
-      if (entry.date > today || !(metric === "protein" ? entry.kind === "meal" : goals.isCreatine(entry) && entry.unit === "g")) continue;
+      if (entry.date > today || !(metric === "protein" || metric === "calories" ? entry.kind === "meal" && (metric !== "calories" || entry.calories != null) : goals.isCreatine(entry) && entry.unit === "g")) continue;
       const start = mode === "weekly" ? shift(entry.date, -((date(entry.date).getUTCDay() + 6) % 7)) : entry.date;
       const point = points.get(start) || { start, end: mode === "weekly" ? shift(start, 6) : start, value: 0 };
-      point.value += metric === "protein" ? entry.protein : entry.amount;
+      point.value += metric === "protein" ? entry.protein : metric === "calories" ? entry.calories : entry.amount;
       points.set(start, point);
     }
     return [...points.values()].sort((a, b) => a.start.localeCompare(b.start)).slice(-20);

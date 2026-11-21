@@ -23,6 +23,7 @@ jobs:
       - run: ruff format --check src tests scripts launch.py
       - run: python -m unittest discover -s tests -v
       - run: node --check src/fitness_tracker/web/app.js
+      - run: node --check src/fitness_tracker/web/section-info.js
       - run: node --check src/fitness_tracker/web/workout-history.js
       - run: node --check src/fitness_tracker/web/body-map.js
       - run: node --check src/fitness_tracker/web/dashboard.js
@@ -47,4 +48,6 @@ jobs:
       - run: node tests/test_habit_details.cjs
       - run: node tests/test_intake_chart.cjs
       - run: node tests/test_week_review.cjs
+      - run: node tests/test_cardio_calories.cjs
+      - run: node tests/test_home_workouts.cjs
       - run: node tests/test_personal_records.cjs

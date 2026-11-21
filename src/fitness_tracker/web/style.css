@@ -3077,10 +3077,9 @@ a {
   background: linear-gradient(90deg, #527bda, #8370ed, #b17af3, #e28ccf);
 }
 .body-map-detail {
-  height: 270px;
+  min-height: 270px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .body-map-detail h3 {
   font-size: 30px;
@@ -3108,10 +3107,7 @@ a {
   list-style: none;
   padding: 0;
   margin: 12px 0 18px;
-  max-height: 110px;
   min-height: 0;
-  flex: 1;
-  overflow: auto;
 }
 .body-area-exercises li {
   display: flex;
@@ -4043,8 +4039,73 @@ a {
 .consistency-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
+#supplement-goal-cards {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+#supplement-goal-cards > .supplement-goal-card {
+  grid-column: auto;
+  padding: 14px;
+  border-radius: 12px;
+  min-width: 0;
+}
+.supplement-goal-card .card-head {
+  margin-bottom: 10px;
+}
 .supplement-goal-card h3 {
-  font-size: 17px;
+  font-size: 15px;
+}
+.supplement-goal-card .card-head .pill {
+  display: none;
+}
+.supplement-goal-card .goal-timeframe {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 8px;
+}
+.supplement-goal-card .field {
+  margin-bottom: 8px;
+}
+.supplement-goal-card label {
+  margin-bottom: 4px;
+}
+.supplement-goal-card input,
+.supplement-goal-card select {
+  height: 36px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.supplement-goal-card .goal-current {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding-top: 10px;
+  margin-top: 2px;
+}
+.supplement-goal-card .goal-current > span {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.supplement-goal-card .goal-current strong {
+  font-size: 20px;
+  margin-top: 0;
+  white-space: nowrap;
+}
+.supplement-goal-card .goal-current small {
+  font-size: 12px;
+}
+.supplement-goal-card .goal-current p {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 0;
+}
+@media (max-width: 560px) {
+  .supplement-goal-card input,
+  .supplement-goal-card select {
+    height: 40px;
+  }
 }
 .custom-goal-supplement label {
   display: block;
@@ -4123,8 +4184,99 @@ a {
 }
 .primary-goals {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
 }
-@media (max-width: 1350px) {
+.primary-goals > .goal-card {
+  padding: 14px;
+  border-radius: 12px;
+  min-width: 0;
+}
+.primary-goals .card-head {
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.primary-goals .card-head h2 {
+  font-size: 15px;
+}
+.primary-goals .row-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.primary-goals .row-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.primary-goals .field {
+  margin-bottom: 8px;
+}
+.primary-goals label {
+  margin-bottom: 4px;
+}
+.primary-goals input,
+.primary-goals select {
+  height: 36px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.primary-goals .goal-timeframe {
+  gap: 8px;
+}
+.primary-goals .goal-current {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding-top: 10px;
+  margin-top: 2px;
+}
+.primary-goals .goal-current > span {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.primary-goals .goal-current strong {
+  font-size: 20px;
+  margin-top: 0;
+  white-space: nowrap;
+}
+.primary-goals .goal-current small {
+  font-size: 12px;
+}
+.primary-goals .goal-current p {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 0;
+}
+.primary-goals > .cardio-goal-card {
+  grid-column: 1 / -1;
+  padding: 18px;
+}
+.cardio-goal-content,
+.cardio-goal-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.cardio-goal-fields > p {
+  margin-bottom: 10px;
+}
+.cardio-goal-notes .muscle-note {
+  margin-top: 0;
+}
+.cardio-goal-notes .muscle-note + .muscle-note {
+  margin-top: 8px;
+}
+.sleep-goal-explanation {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.sleep-goal-explanation .muscle-note {
+  margin-top: 8px;
+}
+@media (max-width: 1100px) {
   .primary-goals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4137,6 +4289,14 @@ a {
 @media (max-width: 650px) {
   .primary-goals {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .cardio-goal-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .primary-goals input,
+  .primary-goals select {
+    height: 40px;
   }
   .consistency-grid,
   .sleep-progress-pair {
@@ -5242,7 +5402,7 @@ dialog.monday-datepicker::backdrop {
 .progress-page #insights-body-map .card-head { margin-bottom: 12px; }
 .progress-page #insights-body-map .body-map-figure svg { height: min(33vh, 290px); width: auto; }
 .progress-page #insights-body-map .body-map-note { margin-top: 12px; }
-.progress-page #insights-body-map .body-map-detail { height: 255px; }
+.progress-page #insights-body-map .body-map-detail { min-height: 255px; }
 .progress-page #insights-body-map .body-map-detail h3 { font-size: 28px; margin: 4px 0 12px; }
 .progress-page #insights-body-map .body-map-controls .btn { min-height: 36px; padding: 7px 12px; }
 .progress-page #insights-body-map .body-map-controls input { padding: 8px 10px; }
@@ -5269,7 +5429,7 @@ dialog.monday-datepicker::backdrop {
 @media (max-width: 700px) {
   .records-card .pr-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .progress-page #insights-body-map .body-map-card { padding: 16px; }
-  .progress-page #insights-body-map .body-map-detail { height: auto; }
+  .progress-page #insights-body-map .body-map-detail { min-height: 0; }
   .progress-page #insights-body-map .body-map-figure svg { height: 265px; }
   .dashboard-page .overview-metrics .consistency-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -5310,6 +5470,47 @@ dialog.monday-datepicker::backdrop {
 .habit-day-tooltip dd > span { display: block; }
 .habit-day-tooltip > p { margin-top: 10px; font-size: 10px; color: #ad9bbf; }
 
+/* Cardio uses actual minutes; goal credit is shown separately. */
+.cardio-week-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin: 20px 0;
+}
+.cardio-week-stats span {
+  display: block;
+  color: #b9a6d0;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.cardio-week-stats strong {
+  display: block;
+  font-size: 24px;
+}
+.cardio-week-stats small {
+  font-size: 12px;
+  font-weight: 400;
+  color: #b9a6d0;
+}
+.cardio-summary .card-head { flex-wrap: wrap; }
+.calorie-intake-card { grid-column: 1 / -1; }
+.calorie-intake-card .quantity-pair strong small { font-size: 14px; }
+.meal-nutrients { font-size: 13px; text-align: right; }
+.meal-nutrients span { color: #b9a6d0; font-size: 11px; font-weight: 400; }
+@media (max-width: 850px) {
+  .cardio-week-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.journal-home {
+  border-top: 1px solid #9374b342;
+  padding-top: 22px;
+}
+.heat-cell.home,
+.habit-legend .home-day {
+  background: #6d8fba;
+  box-shadow: inset 0 0 0 1px #b5d3ff55;
+}
+
 /* Keep logging review and corrections in one exchange. */
 .coach-page .message .chat-preview-actions {
   display: flex;
@@ -5335,6 +5536,48 @@ dialog.monday-datepicker::backdrop {
 .chat-review-hint { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .chat-review-hint .btn { padding: 7px 10px; font-size: 12px; flex-shrink: 0; }
 .chat-review-hint[hidden], .chat-compose[hidden] { display: none; }
+
+.section-info-trigger {
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+  width: 20px;
+  height: 20px;
+  margin-left: 7px;
+  padding: 0;
+  border: 1px solid #b49bd16b;
+  border-radius: 50%;
+  background: #9d7ccc12;
+  color: #c5b4dc;
+  font: 600 12px/1 Georgia, serif;
+  cursor: help;
+}
+.section-info-trigger:hover,
+.section-info-trigger:focus-visible,
+.section-info-trigger[aria-expanded="true"] {
+  background: #9d7ccc38;
+  color: #f0e9ff;
+  outline: 2px solid #a988dc;
+  outline-offset: 2px;
+}
+.section-info-tooltip {
+  position: fixed;
+  z-index: 1000;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid #a78bcb80;
+  border-radius: 10px;
+  background: #21182f;
+  color: #e9dff5;
+  box-shadow: 0 8px 30px #0007;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.section-info-tooltip[hidden] { display: none; }
 @media (max-width: 700px) {
   .chat-review-hint { padding: 10px 12px; }
   .chat-preview-actions { align-items: flex-start; }

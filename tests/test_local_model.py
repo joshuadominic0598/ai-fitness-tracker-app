@@ -46,9 +46,10 @@ class LocalModelTests(unittest.TestCase):
             "date": "2026-02-01",
             "description": "Milk and egg",
             "protein": 11.25,
+            "calories": 170,
             "items": [
-                {"name": "Milk", "portion": "150ml", "protein": 4.95},
-                {"name": "Egg", "portion": "1 large", "protein": 6.3},
+                {"name": "Milk", "portion": "150ml", "protein": 4.95, "calories": 90},
+                {"name": "Egg", "portion": "1 large", "protein": 6.3, "calories": 80},
             ],
         }
         for message in (
@@ -75,6 +76,8 @@ class LocalModelTests(unittest.TestCase):
             self.assertEqual(revised["items"][0]["protein"], 8.25)
             self.assertEqual(revised["items"][1]["protein"], 6.3)
             self.assertEqual(revised["protein"], 14.55)
+            self.assertEqual(revised["calories"], 230)
+            self.assertEqual(revised["items"][1]["calories"], 80)
             self.assertTrue(result["agent"]["source_based_correction"])
             self.assertEqual(len(store.drafts()), 1)
             self.assertEqual(store.entries(), [])

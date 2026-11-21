@@ -3,7 +3,12 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from fitness_tracker.anatomy import REVERSE_CURL_IDS, classify
+from fitness_tracker.anatomy import (
+    BODY_PARTS,
+    REVERSE_CURL_IDS,
+    SECONDARY_MUSCLE_ADDITIONS,
+    classify,
+)
 from fitness_tracker.store import EXERCISES, Store, insights
 
 
@@ -45,6 +50,51 @@ class TrainingGroupsTests(unittest.TestCase):
         result = insights(self.store.entries(), self.store.profile())
         self.assertEqual(result["body_parts"], {"Forearms": 2, "Biceps": 3})
         self.assertEqual(result["area_details"]["Forearms"]["areas"], {"Reverse curls": 2})
+
+    def test_catalog_has_mapped_primary_and_known_assisting_muscles(self):
+        for exercise in EXERCISES.values():
+            with self.subTest(exercise=exercise["id"]):
+                self.assertTrue(exercise["primaryMuscles"])
+                self.assertTrue(exercise["bodyParts"])
+                for muscle in exercise["primaryMuscles"] + exercise["secondaryMuscles"]:
+                    self.assertIn(muscle, BODY_PARTS)
+
+    def test_reviewed_assisting_groups_preserve_existing_mappings(self):
+        for identifier, additions in SECONDARY_MUSCLE_ADDITIONS.items():
+            with self.subTest(exercise=identifier):
+                self.assertTrue(set(additions) <= set(EXERCISES[identifier]["secondaryMuscles"]))
+        original = {
+            "id": "Butterfly",
+            "primaryMuscles": ["chest"],
+            "secondaryMuscles": ["biceps"],
+        }
+        mapped = classify(original)
+        self.assertEqual(mapped["primaryMuscles"], ["chest"])
+        self.assertEqual(mapped["secondaryMuscles"], ["biceps", "shoulders"])
+        self.assertEqual(classify(mapped), mapped)
+        self.assertEqual(original["secondaryMuscles"], ["biceps"])
+        self.assertEqual(EXERCISES["Triceps_Pushdown"]["secondaryMuscles"], [])
+
+    def test_flys_and_crossovers_count_as_primary_chest_alongside_presses(self):
+        self.save(
+            [
+                ("Pushups", 1),
+                ("Barbell_Bench_Press_-_Medium_Grip", 3),
+                ("Low_Cable_Crossover", 2),
+                ("Butterfly", 2),
+            ]
+        )
+        result = insights(self.store.entries(), self.store.profile())
+        self.assertEqual(result["body_parts"]["Chest"], 8)
+        self.assertEqual(
+            result["area_details"]["Chest"]["exercises"],
+            {
+                "Pushups": 1,
+                "Barbell_Bench_Press_-_Medium_Grip": 3,
+                "Low_Cable_Crossover": 2,
+                "Butterfly": 2,
+            },
+        )
 
     def test_high_level_groups_keep_area_detail(self):
         self.save(

@@ -45,6 +45,7 @@ class DirectChatTests(unittest.TestCase):
                 "date": "2026-11-10",
                 "description": "Bread and peanut butter",
                 "protein": 14,
+                "calories": 250,
             },
         }
         with patch.object(self.coach, "generate", return_value=proposal) as generate:

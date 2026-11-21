@@ -16,7 +16,9 @@ def meal_portion_revision(message, original):
         flags=re.I,
     )[0]
     if re.search(
-        r"\b(?:add|remove|delete|replace|instead|also|and|protein|brand|type)\b", clause, re.I
+        r"\b(?:add|remove|delete|replace|instead|also|and|protein|calories|kcal|brand|type)\b",
+        clause,
+        re.I,
     ):
         return None
     quantities = list(re.finditer(r"(\d+(?:\.\d+)?)\s*(ml|kg|g|l)\b", clause, re.I))
@@ -52,6 +54,12 @@ def meal_portion_revision(message, original):
     changed["portion"] = f"{float(new[1]):g} {new_unit}"
     changed["protein"] = round(float(changed["protein"]) * ratio, 2)
     result["protein"] = round(sum(float(item["protein"]) for item in result["items"]), 2)
+    if changed.get("calories") is not None:
+        changed["calories"] = round(float(changed["calories"]) * ratio, 2)
+    if all(item.get("calories") is not None for item in result["items"]):
+        result["calories"] = round(sum(float(item["calories"]) for item in result["items"]), 2)
+    else:
+        return None  # Re-estimate with the model when item calories are incomplete.
     delta = result["protein"] - float(original["protein"])
     for bound in ("low", "high"):
         if bound in result:
@@ -92,7 +100,10 @@ def pending_revision(message, history, drafts):
         if draft["kind"] == "batch"
         else {draft["kind"]}
     )
-    topics = {{"workout": "training", "plan": "training"}.get(k, k) for k in kinds}
+    topics = {
+        {"workout": "training", "home_workout": "training", "plan": "training"}.get(k, k)
+        for k in kinds
+    }
     current = chat_topics(message) - {"assessment"}
     return draft["id"] if not current or current <= topics else None
 
@@ -115,6 +126,11 @@ def requested_log_kind(message, history=()):
             if len(topics) > 1:
                 return "any"
             topic = topics.pop()
+            location = (
+                message if re.search(r"\b(?:home|gym|in my room)\b", message, re.I) else value
+            )
+            if topic == "training" and re.search(r"\b(?:home|in my room)\b", location, re.I):
+                return "home_workout"
             return {"training": "workout"}.get(topic, topic)
     return "any"
 
@@ -129,6 +145,21 @@ def check_meal_calculation(proposal, expression):
     precision = max(0, -Decimal(str(protein)).normalize().as_tuple().exponent)
     if abs(value - protein) > 0.05 and round(value, precision) != protein:
         raise ValueError("Protein total does not match the breakdown.")
+
+
+def require_meal_calories(proposal):
+    """New AI estimates need both nutrients; older saved meals remain readable."""
+    if not isinstance(proposal, dict):
+        raise ValueError("Prepare a meal object with protein and calories.")
+    items = proposal.get("items", [])
+    if not isinstance(items, list):
+        raise ValueError("Prepare a food item list with protein and calories.")
+    if proposal.get("calories") in (None, "") or any(
+        not isinstance(item, dict) or item.get("calories") in (None, "") for item in items
+    ):
+        raise ValueError(
+            "Estimate calories in kcal for the meal and every food item before preparing the preview."
+        )
 
 
 def draft_summary(draft):
@@ -146,8 +177,14 @@ def draft_summary(draft):
             if len(description) > 100:
                 description = description[:97] + "…"
             parts.append(f"{data['protein']:g} g protein ({description})")
+            if data.get("calories") is not None:
+                parts[-1] += f"; {data['calories']:g} kcal"
             if data.get("low") is not None and data.get("high") is not None:
                 parts[-1] += f"; estimated range {data['low']:g}–{data['high']:g} g"
+        elif kind == "cardio":
+            parts.append(
+                f"{data['activity']}: {data['minutes']:g} min, {data['intensity']} intensity"
+            )
         elif kind in ("supplement", "creatine"):
             parts.append(f"{data['name']}: {data['amount']:g} {data['unit']}")
         elif kind == "sleep":
@@ -159,7 +196,11 @@ def draft_summary(draft):
             exercises = data["exercises"]
             count = len(exercises)
             exercise_label = f"{count} exercise{'s' if count != 1 else ''}"
-            if kind == "plan":
+            if kind == "home_workout":
+                parts.append(
+                    f"a home workout with {exercise_label}, {sum(len(e['sets']) for e in exercises)} sets (not a gym day)"
+                )
+            elif kind == "plan":
                 parts.append(f"a session plan with {exercise_label}")
             else:
                 sets = [s for e in exercises for s in e["sets"]]
@@ -177,7 +218,7 @@ def draft_message(draft):
         else [{"kind": draft["kind"], "data": draft["data"]}]
     )
     incomplete = any(
-        item["kind"] == "workout"
+        item["kind"] in ("workout", "home_workout")
         and "Needs clarification (not included" in item["data"].get("notes", "")
         for item in items
     )
@@ -195,11 +236,14 @@ def draft_message(draft):
             data = item["data"]
             lines = [
                 f"{index}. {food['name']} ({food['portion']}): ≈{food['protein']:g} g protein"
+                + (f" · ≈{food['calories']:g} kcal" if food.get("calories") is not None else "")
                 + (f" — {food['notes']}" if food.get("notes") else "")
                 for index, food in enumerate(data.get("items", []), 1)
             ]
             if lines:
                 lines.append(f"\nTotal: ≈{data['protein']:g} g protein")
+                if data.get("calories") is not None:
+                    lines[-1] += f" · ≈{data['calories']:g} kcal"
                 if "low" in data and "high" in data:
                     lines.append(f"Estimated range: {data['low']:g}–{data['high']:g} g")
             if data.get("notes"):
@@ -207,7 +251,7 @@ def draft_message(draft):
             if lines:
                 sections.append("\n".join(lines))
             continue
-        if item["kind"] not in ("workout", "plan"):
+        if item["kind"] not in ("workout", "home_workout", "plan"):
             if item["data"].get("notes"):
                 note = "**Note:** " + item["data"]["notes"]
                 if note not in sections:

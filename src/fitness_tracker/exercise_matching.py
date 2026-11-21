@@ -12,6 +12,7 @@ def normalize(value):
         (r"\b(?:single|one)\s+arm\b", "unilateral"),
         (r"\b(?:both|two)\s+arms?\b", ""),
         (r"\b(?:push\s*ups?|pushups)\b", "pushup"),
+        (r"\b(?:sit\s*ups?|situps)\b", "situp"),
         (r"\b(?:pull\s*ups?|pullups)\b", "pullup"),
         (r"\bcunches\b", "crunches"),
         (r"\bwide grip lat\b|\blat wide grip\b", "wide grip lat"),

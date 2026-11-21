@@ -24,6 +24,22 @@ python3 -m venv .venv-agent
 
 Use `.venv-agent\Scripts\python.exe` on Windows. For an isolated sample journal, append `--demo`. For isolated development or tests, pass `--data-dir /path/to/temporary/journal --port 8890`. Never point synthetic tests at a personal journal.
 
+## Home workouts
+
+Named section headings have information icons supplied by `web/section-info.js`. Hover the heading, focus the icon, or tap it to read the explanation; Escape or an outside click dismisses it. Explanations are positioned within the viewport and reattach when a panel is redrawn. Longer home-workout help is shown there instead of repeating it inside the card.
+
+Home strength sessions use the `home_workout` entry kind with the same exercise/set validation as gym `workout` records. Each save creates a separate home session unless an existing home entry ID is explicitly edited. Several home sessions can share a date with each other and with a gym workout; they never participate in the gym-only daily consolidation or proposal replacement. Cross-category edits between gym/home sessions are rejected. Cardio exercises must be logged through the separate cardio tracker.
+
+Both strength categories feed body-map emphasis/calibration, set volume, exercise history, search of tracked movements, frequency, personal records and strength trends. Gym day counts, weekly gym goals and gym consistency continue to use only `workout` records. The training heatmap shows home-only days in their own color. AI home logging retains its category through clarification, preview, correction and approval. A shorthand such as “10 pushups and 20 situps” retains both exercises.
+
+## Cardio and food calories
+
+Track separates strength training (`workout` records) from cardio (`cardio` records). Cardio logs store an activity from the grouped sports/aerobic list, minutes, and the user's overall felt intensity (`moderate` or `high`). They never add strength-training days, sets, muscle-map volume or personal records.
+
+Set goals includes a weekly cardio target with moderate and high-intensity minutes. Both fields add to a single flexible target: `moderate + 2 × high`, in moderate-equivalent minutes. Logged sessions use the same conversion, so either intensity can substitute for the other. Actual minutes remain visible separately. Targets default to off (both zero); the adult 150/75-minute guideline is a linked reference. Weeks run Monday–Sunday, include today, and exclude future records. The cardio calendar shows cumulative weekly goal credit. This goal is separate from the existing six consistency scores.
+
+Meals can store `calories` in kcal at meal and item level, independently of protein grams. Calories are optional in manual meal forms; a blank value stays unknown. AI meal previews still estimate calories alongside protein. Totals identify missing calorie entries; the completed-day average stays unavailable when any meal in that window has unknown calories. New AI meal previews require calorie estimates for each food and their total. Qwen emits separate arithmetic expressions for protein and calories; the app evaluates both and validates the item totals before approval. Portion corrections scale both nutrients. No historical calories are fabricated, and no energy expenditure or calorie target is inferred from cardio.
+
 ## Voice input
 
 Select the microphone icon beside Send in the AI coach composer, including when opened from Track → Log using AI. The transcript is appended to the current message, remains editable, and is never sent automatically. Existing text and edits made during transcription are preserved. Select the stop icon to transcribe, or cancel audio before sending; leaving the screen or starting a new chat discards any late result.

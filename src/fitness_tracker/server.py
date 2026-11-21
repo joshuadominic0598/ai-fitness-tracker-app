@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .cardio import ACTIVITIES, HIGH_WEIGHT
 from .coach import Coach, Connections, research, videos
 from .coach_skills import skill_catalog
 from .store import CATALOG, Store, insights
@@ -243,6 +244,8 @@ class Handler(BaseHTTPRequestHandler):
                     "token": self.server.token,
                     "demo": self.server.demo,
                     "today": date.today().isoformat(),
+                    "cardio_activities": ACTIVITIES,
+                    "cardio_high_weight": HIGH_WEIGHT,
                 }
             )
         if path == "/api/profile":

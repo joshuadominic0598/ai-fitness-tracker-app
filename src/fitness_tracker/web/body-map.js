@@ -99,7 +99,7 @@
     since.setUTCDate(since.getUTCDate() - 83);
     const recent = history.filter(
       (w) =>
-        w.kind === "workout" &&
+        ["workout", "home_workout"].includes(w.kind) &&
         w.date <= end &&
         w.date >= since.toISOString().slice(0, 10),
     );
@@ -114,7 +114,7 @@
       }
     function tally(list) {
       const areas = empty();
-      for (const workout of list.filter((w) => w.kind === "workout"))
+      for (const workout of list.filter((w) => ["workout", "home_workout"].includes(w.kind)))
         for (const ex of workout.exercises || []) {
           const exercise = catalog[ex.exercise_id];
           if (!exercise) continue;
@@ -206,7 +206,7 @@
         .filter((a) => a.primary + a.secondary > 0)
         .sort((a, b) => b.exposure - a.exposure),
       sessions: new Set(
-        workouts.filter((w) => w.kind === "workout").map((w) => w.date),
+        workouts.filter((w) => ["workout", "home_workout"].includes(w.kind)).map((w) => w.date),
       ).size,
     };
   }
@@ -294,9 +294,9 @@
       }
       for (const type of ["pointerover", "focusin"])
         map.addEventListener(type, (event) => {
-          const target = event.target.closest(
-            type === "pointerover" ? "g[data-muscle]" : "[data-muscle]",
-          );
+          // Chips select on click (including keyboard activation). Selecting on
+          // focus would move the chip before its click as the full list resizes.
+          const target = event.target.closest("g[data-muscle]");
           if (target) select(target.dataset.muscle);
         });
       map.addEventListener("pointerleave", () =>

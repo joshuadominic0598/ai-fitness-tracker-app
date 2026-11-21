@@ -36,6 +36,7 @@ class CoachTests(unittest.TestCase):
                 "date": date.today().isoformat(),
                 "description": "Dal and eggs",
                 "protein": 30,
+                "calories": 450,
                 "low": 25,
                 "high": 35,
             },
@@ -177,7 +178,12 @@ class CoachTests(unittest.TestCase):
         reply = {
             "action": "meal",
             "message": "Estimate for your selected day.",
-            "proposal": {"date": "2026-11-05", "description": "Lunch", "protein": 30},
+            "proposal": {
+                "date": "2026-11-05",
+                "description": "Lunch",
+                "protein": 30,
+                "calories": 400,
+            },
         }
         with patch.object(
             self.coach,

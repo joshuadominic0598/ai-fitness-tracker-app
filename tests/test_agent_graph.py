@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +23,16 @@ class AgentGraphTests(unittest.TestCase):
             }
         )
         self.coach = Coach(self.store, self.connections)
+        # Tutorial searches from earlier tests can still occupy the shared workers.
+        # Keep graph tests independent of both those tasks and live search services.
+        pool = ThreadPoolExecutor(max_workers=2)
+        self.addCleanup(pool.shutdown, wait=True, cancel_futures=True)
+        pool_patch = patch("fitness_tracker.tutorial_search.POOL", pool)
+        pool_patch.start()
+        self.addCleanup(pool_patch.stop)
+        search_patch = patch("fitness_tracker.coach.web_search", return_value=[])
+        search_patch.start()
+        self.addCleanup(search_patch.stop)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -107,6 +118,23 @@ class AgentGraphTests(unittest.TestCase):
         self.assertNotIn("draft", result)
         self.assertEqual(self.store.entries(), [])
 
+    def test_search_queue_timeout_is_visible(self):
+        pending = Future()
+        with (
+            patch.object(
+                self.coach, "generate", return_value={"action": "answer", "message": "Advice"}
+            ),
+            patch.object(self.coach, "remaining", return_value=0.1),
+            patch("fitness_tracker.tutorial_search.POOL.submit", return_value=pending),
+        ):
+            result = self.coach.chat("Help me train", True, research_mode=True)
+        self.assertTrue(pending.cancelled())
+        self.assertIn("Public search exceeded this turn's time budget.", result["notices"])
+        self.assertTrue(
+            any(t.get("tool") == "web_search" and not t["ok"] for t in result["agent"]["trace"])
+        )
+        self.assertEqual(self.store.entries(), [])
+
     def test_budget_includes_tools_skills_context_and_preserves_constraints(self):
         self.store.save_profile(
             {"constraints": "Cannot train through shoulder pain", "focus": "Build stronger arms"}
@@ -141,7 +169,12 @@ class AgentGraphTests(unittest.TestCase):
         reply = {
             "action": "meal",
             "message": "Estimate",
-            "proposal": {"date": "2026-11-09", "description": "Eggs and bread", "protein": 20},
+            "proposal": {
+                "date": "2026-11-09",
+                "description": "Eggs and bread",
+                "protein": 20,
+                "calories": 350,
+            },
         }
 
         def calc(expression):

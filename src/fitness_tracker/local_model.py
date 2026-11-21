@@ -160,9 +160,16 @@ def response_schema(workout=False, direct=False, meal=False):
                                     "name": {"type": "string"},
                                     "portion": {"type": "string"},
                                     "calculation": {"type": "string"},
+                                    "calorie_calculation": {"type": "string"},
                                     "notes": {"type": "string"},
                                 },
-                                "required": ["name", "portion", "calculation", "notes"],
+                                "required": [
+                                    "name",
+                                    "portion",
+                                    "calculation",
+                                    "calorie_calculation",
+                                    "notes",
+                                ],
                                 "additionalProperties": False,
                             },
                         },
@@ -183,7 +190,9 @@ def response_schema(workout=False, direct=False, meal=False):
                     "answer",
                     "clarify",
                     "meal",
+                    "cardio",
                     "workout",
+                    "home_workout",
                     "sleep",
                     "body",
                     "batch",
@@ -232,11 +241,11 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
     )
     if meal_task:
         messages[0]["content"] += (
-            "\nLOCAL MEAL FORMAT: For each estimated food item include calculation, a numeric expression for that portion's protein (e.g. 150/100*3.3 for 150ml ordinary milk). The app evaluates these expressions and sums item protein locally; do not rely on mental arithmetic. On corrections, preserve untouched items and their protein values; a copied item can use its previous protein as a numeric literal calculation. Use supplied product labels and user-confirmed values first. Fallback reference assumptions only: ordinary dairy milk about 3.3g protein/100ml (8g per 240ml cup); cheddar-like cheese about 25g/100g (7g per 28g); a large whole egg about 6.3g. Special/high-protein milk and different cheeses vary: label your assumption. Never treat food weight as protein weight. Do not invent a label or say these cached references were just looked up."
+            "\nLOCAL MEAL FORMAT: Estimate calories independently from protein, including cooking oils, sauces and drinks. For each food item include calorie_calculation, a numeric expression for its calories in kcal using stated portions and product labels when available. Never derive total calories just from protein grams. Scale BOTH expressions to the entire stated portion, including counts: for 2 eggs multiply each per-egg nutrient value by 2; for 200 g multiply each per-100-g value by 2. Keep the full quantity in the portion field. The app evaluates and sums both nutrients. For each estimated food item include calculation, a numeric expression for that portion's protein (e.g. 150/100*3.3 for 150ml ordinary milk). The app evaluates these expressions and sums item protein locally; do not rely on mental arithmetic. On corrections, preserve untouched items and their protein values; a copied item can use its previous protein as a numeric literal calculation. Use supplied product labels and user-confirmed values first. Fallback reference assumptions only: ordinary dairy milk about 3.3g protein/100ml (8g per 240ml cup); cheddar-like cheese about 25g/100g (7g per 28g); a large whole egg about 6.3g. Special/high-protein milk and different cheeses vary: label your assumption. Never treat food weight as protein weight. Do not invent a label or say these cached references were just looked up."
         )
         if response_kind in ("meal", "meal_revision"):
             messages[0]["content"] += (
-                "\nFor this local meal schema, return ALL the foods as items with name, portion, calculation and assumption notes. Do not stop after the first food. Omit numeric protein fields: the app computes protein from each expression and the total itself. On a portion-only correction, copy every unchanged item and its previous protein as a literal calculation; do not drop or re-estimate it."
+                "\nFor this local meal schema, return ALL the foods as items with name, portion, calculation, calorie_calculation and assumption notes. Do not stop after the first food. Omit numeric protein and calorie fields: the app computes both nutrients from each expression and the totals itself. On a portion-only correction, copy every unchanged item and its previous protein and calories as literal calculation and calorie_calculation; do not drop or re-estimate it."
             )
         if response_kind == "meal_revision":
             messages[0]["content"] += (
@@ -303,11 +312,13 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
             scope = data.get("evidence_scope", {})
         kinds = scope.get("kinds", [])
         categories = {
-            "workouts": "workout",
-            "protein": "meal",
-            "creatine": "creatine",
-            "supplements": "supplement",
-            "sleep": "sleep",
+            "workouts": {"workout", "home_workout"},
+            "cardio": {"cardio"},
+            "protein": {"meal"},
+            "calories": {"meal"},
+            "creatine": {"creatine"},
+            "supplements": {"supplement"},
+            "sleep": {"sleep"},
         }
         schema = {
             "type": "object",
@@ -320,10 +331,10 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
                         category: {
                             "type": "array",
                             "items": {"type": "string", "maxLength": 220},
-                            "minItems": 1 if not kinds or kind in kinds else 0,
-                            "maxItems": 1 if not kinds or kind in kinds else 0,
+                            "minItems": 1 if not kinds or category_kinds.intersection(kinds) else 0,
+                            "maxItems": 1 if not kinds or category_kinds.intersection(kinds) else 0,
                         }
-                        for category, kind in categories.items()
+                        for category, category_kinds in categories.items()
                     },
                     "required": list(categories),
                     "additionalProperties": False,
@@ -409,9 +420,13 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
                 raise ValueError("The local meal breakdown needs a food object for each item.")
             if item.get("calculation"):
                 item["protein"] = round(calculator(item["calculation"])["value"], 2)
+            if item.get("calorie_calculation"):
+                item["calories"] = round(calculator(item["calorie_calculation"])["value"], 2)
         values = [float(item["protein"]) for item in items]
         total = round(sum(values), 2)
         data["protein"] = total
+        if all(item.get("calories") is not None for item in items):
+            data["calories"] = round(sum(float(item["calories"]) for item in items), 2)
         # Do not display a model-produced range that excludes the computed sum.
         if not float(data.get("low", total)) <= total <= float(data.get("high", total)):
             data.pop("low", None)

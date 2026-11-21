@@ -34,6 +34,7 @@ class ProviderActionTests(unittest.TestCase):
                     "date": "2026-11-12",
                     "description": "Milk and egg",
                     "protein": 18,
+                    "calories": 250,
                     "calculation": "3+6.5+6.3+2",
                 },
             }
@@ -71,6 +72,7 @@ class ProviderActionTests(unittest.TestCase):
                     "date": "2026-11-12",
                     "description": "Toast",
                     "protein": 18,
+                    "calories": 250,
                     "calculation": "1+2",
                 },
             }
@@ -133,7 +135,13 @@ class ProviderActionTests(unittest.TestCase):
             ],
         }
         cases = {
-            "meal": {"date": day, "description": "Toast", "protein": 8, "calculation": "4+4"},
+            "meal": {
+                "date": day,
+                "description": "Toast",
+                "protein": 8,
+                "calories": 200,
+                "calculation": "4+4",
+            },
             "workout": workout,
             "plan": {"date": day, "exercises": [{"exercise_id": "Pushups"}]},
             "creatine": {"date": day, "amount": 5, "unit": "g"},
@@ -145,7 +153,12 @@ class ProviderActionTests(unittest.TestCase):
                     {"kind": "workout", "data": workout},
                     {
                         "kind": "meal",
-                        "data": {"date": day, "description": "Toast", "protein": 8},
+                        "data": {
+                            "date": day,
+                            "description": "Toast",
+                            "protein": 8,
+                            "calories": 200,
+                        },
                         "calculation": "4+4",
                     },
                 ]
@@ -205,7 +218,13 @@ class ProviderActionTests(unittest.TestCase):
             "sets": [{"weight": 0, "reps": 12, "seconds": 0}],
         }
         cases = {
-            "meal": {"date": day, "description": "Toast", "protein": 8, "calculation": "4+4"},
+            "meal": {
+                "date": day,
+                "description": "Toast",
+                "protein": 8,
+                "calories": 200,
+                "calculation": "4+4",
+            },
             "workout": {"date": day, "exercises": [movement]},
             "plan": {"date": day, "exercises": [{"exercise_id": "Pushups"}]},
             "creatine": {"date": day, "amount": 5, "unit": "g"},
@@ -267,7 +286,9 @@ class ProviderActionTests(unittest.TestCase):
         from fitness_tracker.chat_actions import pending_revision
 
         coach, store = self.make_coach("ollama")
-        draft = store.draft("meal", {"date": "2026-11-11", "description": "Toast", "protein": 8})
+        draft = store.draft(
+            "meal", {"date": "2026-11-11", "description": "Toast", "protein": 8, "calories": 200}
+        )
         history = [{"role": "assistant", "draft": draft}]
         self.assertIsNone(pending_revision("Change my sleep to 8 hours", history, store.drafts()))
         self.assertIsNone(
@@ -341,7 +362,9 @@ class ProviderActionTests(unittest.TestCase):
 
     def test_stale_preview_cannot_be_saved_through_chat(self):
         coach, store = self.make_coach("ollama")
-        draft = store.draft("meal", {"date": "2026-11-11", "description": "Toast", "protein": 8})
+        draft = store.draft(
+            "meal", {"date": "2026-11-11", "description": "Toast", "protein": 8, "calories": 200}
+        )
         store.message("assistant", {"text": "Preview ready", "draft": draft})
         store.save("meal", {"date": "2026-11-11", "description": "Intervening edit", "protein": 10})
         with patch.object(coach, "generate") as generate:

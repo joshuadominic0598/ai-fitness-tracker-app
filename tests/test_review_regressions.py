@@ -46,7 +46,10 @@ class ReviewRegressionTests(unittest.TestCase):
                 "action": "meal",
                 "message": "Review",
                 "calculation": "12",
-                "proposal": meal([{"name": "Eggs", "portion": "2", "protein": 12}]),
+                "proposal": {
+                    **meal([{"name": "Eggs", "portion": "2", "protein": 12, "calories": 140}]),
+                    "calories": 140,
+                },
             },
         ):
             result = self.coach.chat(

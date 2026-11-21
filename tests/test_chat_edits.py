@@ -49,15 +49,16 @@ class ChatEditTests(unittest.TestCase):
                     "description": "Milk and bread",
                     "protein": 18.2,
                     "items": [
-                        {"name": "Milk", "portion": "400ml", "protein": 13.2},
+                        {"name": "Milk", "portion": "400ml", "protein": 13.2, "calories": 240},
                         {"name": "Bread", "portion": "1 slice", "protein": 5},
                     ],
                 },
                 {
                     "description": "Milk",
                     "protein": 13.2,
+                    "calories": 240,
                     "items": [
-                        {"name": "Milk", "portion": "400ml", "protein": 13.2},
+                        {"name": "Milk", "portion": "400ml", "protein": 13.2, "calories": 240},
                     ],
                 },
                 "Log my food: 400ml milk",
@@ -107,6 +108,36 @@ class ChatEditTests(unittest.TestCase):
                 "Log my workout: Plank 40s",
             ),
         ]
+        cases.extend(
+            [
+                (
+                    "cardio",
+                    {"activity": "Badminton", "minutes": 30, "intensity": "moderate"},
+                    {"activity": "Badminton", "minutes": 40, "intensity": "high"},
+                    "Log my cardio: badminton 40 minutes high intensity",
+                ),
+                (
+                    "home_workout",
+                    {
+                        "exercises": [
+                            {
+                                "exercise_id": "Pushups",
+                                "sets": [{"weight": 0, "reps": 10, "seconds": 0}],
+                            }
+                        ]
+                    },
+                    {
+                        "exercises": [
+                            {
+                                "exercise_id": "Pushups",
+                                "sets": [{"weight": 0, "reps": 12, "seconds": 0}],
+                            }
+                        ]
+                    },
+                    "Log my home workout: Pushups 12 reps bodyweight",
+                ),
+            ]
+        )
         for kind, old, new, source in cases:
             with self.subTest(kind=kind):
                 self.store.reset()
@@ -129,7 +160,7 @@ class ChatEditTests(unittest.TestCase):
                     self.assertEqual(
                         [i["name"] for i in result["draft"]["data"]["items"]], ["Milk"]
                     )
-                if kind == "workout":
+                if kind in ("workout", "home_workout"):
                     self.assertEqual(len(result["draft"]["data"]["exercises"][0]["sets"]), 1)
                 cached = self.coach.chat(
                     source, True, edit_message_id=user_id, request_id="edited-request"
@@ -178,7 +209,10 @@ class ChatEditTests(unittest.TestCase):
                     "date": DAY,
                     "description": "Milk",
                     "protein": 13.2,
-                    "items": [{"name": "Milk", "portion": "400ml", "protein": 13.2}],
+                    "calories": 240,
+                    "items": [
+                        {"name": "Milk", "portion": "400ml", "protein": 13.2, "calories": 240}
+                    ],
                 },
             },
         ) as model:
