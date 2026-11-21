@@ -58,8 +58,8 @@ def meal_portion_revision(message, original):
         changed["calories"] = round(float(changed["calories"]) * ratio, 2)
     if all(item.get("calories") is not None for item in result["items"]):
         result["calories"] = round(sum(float(item["calories"]) for item in result["items"]), 2)
-    elif "calories" in result:
-        return None  # Re-estimate with the model rather than retaining a stale calorie total.
+    else:
+        return None  # Re-estimate with the model when item calories are incomplete.
     delta = result["protein"] - float(original["protein"])
     for bound in ("low", "high"):
         if bound in result:
