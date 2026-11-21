@@ -441,6 +441,7 @@ class Coach:
         logging_kind=None,
         approve_draft_id=None,
         progress=None,
+        edit_message_id=None,
     ):
         if consent is not True:
             raise ValueError("Review and accept local coaching before starting the chat.")
@@ -493,12 +494,29 @@ class Coach:
             provider = "ollama"
             model, key = cfg["ollama_model"], ""
             self.local_runs = []
+            all_messages = self.store.messages()
+            edit = (
+                self.store.editable_chat_exchange(edit_message_id)
+                if edit_message_id is not None
+                else None
+            )
+            if edit:
+                original, old_answer, old_draft = edit
+                user_id = original["id"]
+                logging_kind = (
+                    logging_kind or (old_draft or {}).get("kind") or original.get("logging_kind")
+                )
+                if logging_kind == "batch":
+                    logging_kind = "any"
+                log_date = log_date or original.get("context_date")
+                revise_draft_id = None
+                # The edited source replaces the whole request. Old answers must not
+                # reintroduce removed foods, doses or workout sets into the new preview.
+                all_messages = [m for m in all_messages if m["id"] < user_id]
             history = [
-                item
-                for item in self.store.messages()
-                if item.get("status") not in ("pending", "failed")
+                item for item in all_messages if item.get("status") not in ("pending", "failed")
             ][-6:]
-            task = self.store.coach_state()
+            task = {} if edit else self.store.coach_state()
             drafts = self.store.drafts()
             active = next((d for d in drafts if d["id"] == task.get("draft_id")), None)
             if not active and task.get("draft_id"):
@@ -536,10 +554,17 @@ class Coach:
                 self.store.coach_state(value={})
                 task, active, revise_draft_id, logging_kind = {}, None, None, None
                 self.stage("Reverted the pending preview. Following your new question…")
-            revise_draft_id = revise_draft_id or pending_revision(message, history, drafts)
+            revise_draft_id = (
+                None if edit else revise_draft_id or pending_revision(message, history, drafts)
+            )
             if departed:
                 revise_draft_id = None
-            if active and not departed and requested_kind in (None, "any", task.get("kind")):
+            if (
+                active
+                and not revise_draft_id
+                and not departed
+                and requested_kind in (None, "any", task.get("kind"))
+            ):
                 revise_draft_id = active["id"]
             workout_source = re.sub(r"^\s*YOU\s*\n", "", message, flags=re.I).strip()
             workout_followup = False
@@ -600,12 +625,58 @@ class Coach:
                 "logging_kind": logging_kind,
                 "revise_draft_id": revise_draft_id,
                 **(
+                    {
+                        "edit_message_id": user_id,
+                        "replace_response_id": old_answer["id"]
+                        if old_answer
+                        else original.get("replace_response_id"),
+                    }
+                    if edit
+                    else {}
+                ),
+                **(
                     {"logging_kind": logging_kind, "workout_source": workout_source}
                     if logging_kind == "workout"
                     else {}
                 ),
             }
-            if retry:
+            if approve_draft_id and not edit:
+                messages = self.store.messages()
+                answer_index = next(
+                    (
+                        i
+                        for i, m in enumerate(messages)
+                        if m.get("draft", {}).get("id") == approve_draft_id
+                    ),
+                    None,
+                )
+                if answer_index and messages[answer_index - 1]["role"] == "user":
+                    receipt = approve_from_chat(self.store, message, history, approve_draft_id)
+                    if receipt and receipt.get("approved"):
+                        original = messages[answer_index - 1]
+                        response = {
+                            **receipt,
+                            "request_id": request_id,
+                            "provider": provider,
+                            "model": model,
+                        }
+                        self.store.complete_chat_request(
+                            original["id"],
+                            {
+                                **original,
+                                "request_id": request_id,
+                                "replace_response_id": messages[answer_index]["id"],
+                            },
+                            response,
+                        )
+                        self.store.coach_state(value={})
+                        return response
+            if edit:
+                if old_draft:
+                    self.store.dismiss(old_draft["id"])
+                self.store.coach_state(value={})
+                self.store.update_message(user_id, user_data)
+            elif retry:
                 self.store.update_message(user_id, user_data)
             else:
                 user_id = self.store.message("user", user_data)
@@ -654,7 +725,7 @@ class Coach:
                         and (not scope.get("kinds") or e["kind"] in scope["kinds"])
                     ]
                 )
-            if not assessment and not workout_only:
+            if not assessment and not workout_only and not edit:
                 context["conversation_memory"] = self.retrieval.search(
                     message, category="conversation", limit=3
                 )
@@ -758,6 +829,13 @@ class Coach:
                         provider,
                         logging_kind=logging_kind,
                     )
+                    if edit:
+                        messages[0]["content"] += (
+                            "\nThe latest user message is the complete edited logging request. "
+                            "Prepare a fresh preview from this source only. Do not carry over "
+                            "foods, doses or sets removed from it, or apply it as a partial patch. "
+                            "Use clarify for essential missing details."
+                        )
                     portion_edit = (
                         meal_portion_revision(message, revision["data"])
                         if provider == "ollama" and revision and revision["kind"] == "meal"
@@ -821,10 +899,38 @@ class Coach:
                             if assessment
                             else "lesson"
                             if exercise
+                            else "meal_revision"
+                            if revision and revision["kind"] == "meal"
                             else "meal"
-                            if logging_kind == "meal" or (revision and revision["kind"] == "meal")
+                            if logging_kind == "meal"
                             else None,
                         )
+                        if (revision or edit) and reply["action"] == "answer":
+                            self.stage("Applying your changes to the preview…")
+                            reply = self.generate(
+                                messages
+                                + [
+                                    {
+                                        "role": "system",
+                                        "content": (
+                                            "The previous attempt returned commentary without updating the pending draft. "
+                                            "Return a structured proposal for the latest request. For a complete edited "
+                                            "logging request use only that source; for a pending draft correction preserve "
+                                            "untouched entries. Do not claim a change "
+                                            "in message alone. If essential information is missing, use clarify and ask "
+                                            "one specific question. Nothing is saved yet."
+                                        ),
+                                    }
+                                ],
+                                provider,
+                                model,
+                                key,
+                                direct=True,
+                                response_kind="meal_revision"
+                                if (revision and revision["kind"] == "meal")
+                                or (edit and logging_kind == "meal")
+                                else None,
+                            )
                 if (
                     workout_only
                     and isinstance(reply.get("proposal"), dict)
@@ -1055,7 +1161,12 @@ class Coach:
                     "Your notes are still in this chat. "
                     + (proposal_error or "The meal total does not match its calculation.")
                 )
-            elif requested_kind and not response.get("draft") and response["action"] == "answer":
+            elif (
+                (requested_kind or edit)
+                and not revision
+                and not response.get("draft")
+                and response["action"] == "answer"
+            ):
                 response["action"] = "clarify"
                 response["text"] = (
                     "I couldn't prepare a structured preview from that reply. Nothing was saved. "
@@ -1082,6 +1193,12 @@ class Coach:
                     for row in context["retrieved_evidence"]
                 ]
             if revision and not response.get("draft"):
+                if response["action"] != "clarify":
+                    response["action"] = "clarify"
+                    response["text"] = (
+                        "I couldn't apply that change to the preview. The existing preview below "
+                        "is unchanged; nothing was saved. Please retry the correction."
+                    )
                 response["draft"] = revision
                 response["text"] += "\n\n" + draft_message(revision)
             if departed:

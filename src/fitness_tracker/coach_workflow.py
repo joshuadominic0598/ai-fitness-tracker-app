@@ -162,7 +162,17 @@ def merge_revision(original, kind, proposal, message):
         return {**old, **proposal, "exercises": result + list(changed.values())}
     if original["kind"] == "meal" and kind == "meal" and old.get("items") and proposal.get("items"):
         changed = {item["name"].strip().casefold(): item for item in proposal["items"]}
-        items = [changed.pop(item["name"].strip().casefold(), item) for item in old["items"]]
+        correction = re.split(r"\bChange:\s*", message, flags=re.I)[-1]
+        adding = bool(re.search(r"\badd\b", correction, re.I))
+        items = []
+        for item in old["items"]:
+            update = changed.pop(item["name"].strip().casefold(), item)
+            # An addition is not permission to silently re-estimate other foods.
+            words = re.findall(r"[a-z]{3,}", item["name"].casefold())
+            named = any(
+                re.search(r"\b" + re.escape(word) + r"\b", correction, re.I) for word in words
+            )
+            items.append(item if adding and not named else update)
         items.extend(changed.values())
         result = {
             **old,
@@ -170,6 +180,12 @@ def merge_revision(original, kind, proposal, message):
             "items": items,
             "protein": round(sum(float(item["protein"]) for item in items), 2),
         }
+        if adding:
+            # Carry forward the existing uncertainty, adding the new contribution.
+            delta = result["protein"] - float(old["protein"])
+            for bound in ("low", "high"):
+                if bound in old:
+                    result[bound] = round(max(0, float(old[bound]) + delta), 2)
         if (
             not float(result.get("low", result["protein"]))
             <= result["protein"]
@@ -206,8 +222,12 @@ def merge_revision(original, kind, proposal, message):
                 count_old = sum(old_entry["kind"] == entry["kind"] for old_entry in old["entries"])
                 if count_old == 1 and len(same_kind) == 1:
                     update = changed.pop(same_kind[0])
-            if update and entry["kind"] in ("workout", "plan"):
+            if update and entry["kind"] in ("workout", "plan", "meal"):
                 update["data"] = merge_revision(entry, update["kind"], update["data"], message)
+                if entry["kind"] == "meal":
+                    update["calculation"] = "+".join(
+                        str(food["protein"]) for food in update["data"].get("items", [])
+                    ) or str(update["data"]["protein"])
             chosen = update or entry
             if chosen["kind"] == "meal" and not chosen.get("calculation"):
                 chosen["calculation"] = "+".join(
@@ -261,6 +281,30 @@ def simple_intake(message, day, profile):
                 continue
             goal = profile.get("supplement_goals", {}).get(name, {})
             measure = goal.get("measure")
+            label = r"(?:" + "|".join(re.escape(alias) for alias in aliases if alias) + r")"
+            dose = r"(\d+(?:\.\d+)?)\s*(tablets?|capsules?|softgels?)"
+            explicit_dose = re.search(r"\b" + label + r"\s*" + dose + r"\b", message, re.I)
+            explicit_dose = explicit_dose or re.search(
+                r"\b" + dose + r"\s*(?:of\s+)?" + label + r"\b", message, re.I
+            )
+            explicit_dose = explicit_dose or re.search(
+                r"\b(\d+(?:\.\d+)?)\s*" + label + r"\s*(tablets?|capsules?|softgels?)\b",
+                message,
+                re.I,
+            )
+            if explicit_dose:
+                entries.append(
+                    {
+                        "kind": "supplement",
+                        "data": {
+                            "date": day,
+                            "name": supplement_name(name),
+                            "amount": float(explicit_dose[1]),
+                            "unit": explicit_dose[2].lower().rstrip("s"),
+                        },
+                    }
+                )
+                continue
             if measure in ("tablet", "capsule", "softgel"):
                 found_alias = next(
                     re.finditer(

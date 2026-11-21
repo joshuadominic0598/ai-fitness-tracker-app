@@ -641,9 +641,43 @@ class Store:
             )
             user = {**user, "status": "sent"}
             con.execute("UPDATE messages SET data=? WHERE id=?", (json.dumps(user), message_id))
-            con.execute(
-                "INSERT INTO messages(role,data) VALUES ('assistant',?)", (json.dumps(response),)
+            replacement = user.get("replace_response_id")
+            if replacement:
+                con.execute(
+                    "UPDATE messages SET data=? WHERE id=? AND role='assistant'",
+                    (json.dumps(response), replacement),
+                )
+            else:
+                con.execute(
+                    "INSERT INTO messages(role,data) VALUES ('assistant',?)",
+                    (json.dumps(response),),
+                )
+
+    def editable_chat_exchange(self, message_id):
+        """Resolve a current, unresolved logging exchange before replacing its source."""
+        if type(message_id) is not int or message_id < 1:
+            raise ValueError("Choose a logging message to edit.")
+        messages = self.messages()
+        index = next((i for i, m in enumerate(messages) if m["id"] == message_id), None)
+        if index is None or messages[index]["role"] != "user":
+            raise ValueError("That logging message is no longer in this chat.")
+        user = messages[index]
+        answer = messages[index + 1] if index + 1 < len(messages) else None
+        if answer and answer["role"] != "assistant":
+            answer = None
+        draft = next(
+            (d for d in self.drafts() if answer and d["id"] == answer.get("draft", {}).get("id")),
+            None,
+        )
+        if (answer and answer.get("approved")) or not (
+            draft
+            or (user.get("logging_kind") and (not answer or answer.get("action") == "clarify"))
+            or (user.get("status") == "failed" and user.get("edit_message_id"))
+        ):
+            raise ValueError(
+                "Only an unresolved logging message can be edited. Start a new log instead."
             )
+        return user, answer, draft
 
     def message(self, role, data):
         with self.connect() as con:
