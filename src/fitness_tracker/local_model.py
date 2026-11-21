@@ -243,9 +243,17 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
         messages[0]["content"] += (
             "\nLOCAL MEAL FORMAT: Estimate calories independently from protein, including cooking oils, sauces and drinks. For each food item include calorie_calculation, a numeric expression for its calories in kcal using stated portions and product labels when available. Never derive total calories just from protein grams. Scale BOTH expressions to the entire stated portion, including counts: for 2 eggs multiply each per-egg nutrient value by 2; for 200 g multiply each per-100-g value by 2. Keep the full quantity in the portion field. The app evaluates and sums both nutrients. For each estimated food item include calculation, a numeric expression for that portion's protein (e.g. 150/100*3.3 for 150ml ordinary milk). The app evaluates these expressions and sums item protein locally; do not rely on mental arithmetic. On corrections, preserve untouched items and their protein values; a copied item can use its previous protein as a numeric literal calculation. Use supplied product labels and user-confirmed values first. Fallback reference assumptions only: ordinary dairy milk about 3.3g protein/100ml (8g per 240ml cup); cheddar-like cheese about 25g/100g (7g per 28g); a large whole egg about 6.3g. Special/high-protein milk and different cheeses vary: label your assumption. Never treat food weight as protein weight. Do not invent a label or say these cached references were just looked up."
         )
-        if response_kind == "meal":
+        if response_kind in ("meal", "meal_revision"):
             messages[0]["content"] += (
                 "\nFor this local meal schema, return ALL the foods as items with name, portion, calculation, calorie_calculation and assumption notes. Do not stop after the first food. Omit numeric protein and calorie fields: the app computes both nutrients from each expression and the totals itself. On a portion-only correction, copy every unchanged item and its previous protein and calories as literal calculation and calorie_calculation; do not drop or re-estimate it."
+            )
+        if response_kind == "meal_revision":
+            messages[0]["content"] += (
+                "\nREVISING A PENDING MEAL: Return action meal with the updated proposal, not an answer "
+                "claiming an edit. Keep every original food and its protein calculation unless the user "
+                "changed it. Include requested additions with the full quantity. If the user asks for "
+                "the lower range, use conservative item estimates consistently, set low to their sum "
+                "and retain a realistic high. Use clarify only for essential missing information."
             )
     base = local_url(cfg.get("ollama_url", DEFAULT_URL))
     info = request(
@@ -259,7 +267,11 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
         raise ValueError("Choose a local chat model, not an embeddings-only model.")
     context = int(cfg.get("ollama_context_tokens", 8192))
     output = 2500 if response_kind == "workout" else 1400 if meal_task else 850
-    schema = response_schema(response_kind == "workout", direct, response_kind == "meal")
+    schema = response_schema(
+        response_kind == "workout", direct, response_kind in ("meal", "meal_revision")
+    )
+    if response_kind == "meal_revision":
+        schema["properties"]["action"]["enum"] = ["meal", "clarify"]
     if response_kind == "lesson":
         schema = {
             "type": "object",

@@ -153,6 +153,43 @@ class LocalModelTests(unittest.TestCase):
         self.assertEqual(result["calculation"], "4+5")
         self.assertEqual(usage["input_tokens"], 123)
 
+    def test_meal_revision_requires_a_proposal_or_focused_clarification(self):
+        data = {
+            "action": "meal",
+            "message": "Review",
+            "proposal": {
+                "date": "2026-11-21",
+                "description": "Dosa and milk",
+                "items": [
+                    {"name": "Dosa", "portion": "3 medium", "calculation": "4.95", "notes": ""},
+                    {
+                        "name": "Milk",
+                        "portion": "400ml",
+                        "calculation": "400/100*3.3",
+                        "notes": "Assumed dairy milk",
+                    },
+                ],
+            },
+        }
+        with patch(
+            "fitness_tracker.local_model.request", side_effect=[INFO, reply(data)]
+        ) as request:
+            result, _ = generate(
+                [
+                    {"role": "system", "content": "Meal: revise pending_draft"},
+                    {"role": "user", "content": "Add 400ml milk"},
+                ],
+                "qwen3:8b",
+                {},
+                5000,
+                direct=True,
+                response_kind="meal_revision",
+            )
+        schema = request.call_args.args[2]["format"]
+        self.assertEqual(schema["properties"]["action"]["enum"], ["meal", "clarify"])
+        self.assertEqual(result["proposal"]["items"][1]["protein"], 13.2)
+        self.assertEqual(result["proposal"]["protein"], 18.15)
+
     def test_agent_tool_decisions_work_without_a_cloud_transport(self):
         decision = {
             "action": "tool",

@@ -184,6 +184,7 @@ class Handler(BaseHTTPRequestHandler):
                 body.get("logging_kind"),
                 body.get("approve_draft_id"),
                 progress=emit,
+                edit_message_id=body.get("edit_message_id"),
             )
             emit({"type": "final", "response": result})
         except ValueError as error:
@@ -374,6 +375,7 @@ class Handler(BaseHTTPRequestHandler):
                     body.get("revise_draft_id"),
                     body.get("logging_kind"),
                     body.get("approve_draft_id"),
+                    edit_message_id=body.get("edit_message_id"),
                 )
             elif path == "/api/draft-preview":
                 result = store.preview(body.get("id"))
