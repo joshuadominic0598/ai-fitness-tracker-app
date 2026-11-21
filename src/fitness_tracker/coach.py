@@ -554,7 +554,9 @@ class Coach:
                 self.store.coach_state(value={})
                 task, active, revise_draft_id, logging_kind = {}, None, None, None
                 self.stage("Reverted the pending preview. Following your new question…")
-            revise_draft_id = revise_draft_id or pending_revision(message, history, drafts)
+            revise_draft_id = (
+                None if edit else revise_draft_id or pending_revision(message, history, drafts)
+            )
             if departed:
                 revise_draft_id = None
             if (
