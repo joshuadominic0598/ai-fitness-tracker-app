@@ -45,17 +45,24 @@ def chat_topics(message, history=(), logging_kind=None):
     topics = set()
     patterns = {
         "assessment": r"\b(assess\w*|analy[sz]\w*|patterns?|progress|consistency)\b|\b(?:review|evaluate) my\b|\bmy (?:information|data|logs)\b|\bhow (?:am i|have i been) doing\b|\bstrong and weak\b",
-        "training": r"\b(workouts?|exercises?|routines?|programs?|sessions?|trained|training|sets?|reps?|bench|curls?|planks?|grow|hypertrophy|strength|arms?|biceps|triceps|forearms|cardio|fitness|lifting|gym)\b",
-        "meal": r"\b(protein|meal|food|ate|eat|diet|nutrition|breakfast|lunch|dinner)\b",
+        "training": r"\b(workouts?|exercises?|routines?|programs?|sessions?|trained|training|sets?|reps?|bench|curls?|planks?|grow|hypertrophy|strength|arms?|biceps|triceps|forearms|fitness|lifting|gym|pushups?|situps?|push-ups?|sit-ups?|dumbbells?)\b",
+        "cardio": r"\b(cardio|badminton|swimming|swam|pickleball|cycling|cycled|running|jogging|tennis|aerobics|zumba|rowing|hiit)\b",
+        "meal": r"\b(calories|kcal|protein|meal|food|ate|eat|diet|nutrition|breakfast|lunch|dinner)\b",
         "supplement": r"\b(supplements?|vitamin|vitc|vitd|b12|vit c|vit d|collagen|fish oil)\b",
         "creatine": r"\bcreatine\b",
         "sleep": r"\b(sleep|slept|nap|night|rest day|uninterrupted|uniter\w*)\b",
         "body": r"\b((?:body|my) weight|bodyweight measurement|weigh|weighed)\b",
     }
+    from .cardio import ACTIVITY_NAMES
+
+    if any(re.search(r"\b" + re.escape(name) + r"\b", query) for name in ACTIVITY_NAMES):
+        topics.add("cardio")
     for topic, pattern in patterns.items():
         if re.search(pattern, query):
             topics.add(topic)
-    kind_topic = {"workout": "training", "plan": "training"}.get(logging_kind, logging_kind)
+    kind_topic = {"workout": "training", "home_workout": "training", "plan": "training"}.get(
+        logging_kind, logging_kind
+    )
     if kind_topic in patterns:
         topics.add(kind_topic)
     if not topics and len(message.split()) <= 18:
@@ -122,6 +129,9 @@ def scoped_context(context, message, history=(), logging_kind=None):
             }
         goals = profile.get("goals", {})
         keys = set()
+        if "cardio" in topics:
+            ctx["cardio_activities"] = context.get("cardio_activities", [])
+            ctx["profile"]["cardio_goal"] = profile.get("cardio_goal", {})
         if "meal" in topics:
             keys.add("protein")
         if "creatine" in topics:
@@ -138,6 +148,7 @@ def scoped_context(context, message, history=(), logging_kind=None):
             kinds = {
                 "training": "workout",
                 "meal": "meal",
+                "cardio": "cardio",
                 "supplement": "supplement",
                 "creatine": "creatine",
                 "sleep": "sleep",
@@ -146,7 +157,11 @@ def scoped_context(context, message, history=(), logging_kind=None):
             ctx["recent_entries"] = [
                 entry
                 for entry in compact_context(context)["recent_entries"]
-                if entry["kind"] in {kinds[t] for t in topics if t in kinds}
+                if entry["kind"]
+                in (
+                    {kinds[t] for t in topics if t in kinds}
+                    | ({"home_workout"} if "training" in topics else set())
+                )
             ][:2]
     for key in (
         "evidence_scope",
@@ -161,6 +176,8 @@ def scoped_context(context, message, history=(), logging_kind=None):
             ctx[key] = context[key]
     if context.get("pending_draft"):
         ctx["pending_draft"] = context["pending_draft"]
+    if "cardio" in topics:
+        ctx["cardio_activities"] = context.get("cardio_activities", [])
     return ctx
 
 
@@ -258,6 +275,7 @@ def compact_context(context):
                 "constraints",
                 "weight_kg",
                 "goals",
+                "cardio_goal",
                 "sleep_goal",
                 "night_sleep_goal",
                 "night_hours_goal",

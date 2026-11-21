@@ -159,6 +159,32 @@ const escaped = map.render(
   }),
 );
 assert.ok(!escaped.includes("<img src=x"));
+{
+  const chestCatalog = {
+    press: catalog.press,
+    pushup: { ...catalog.press, name: "Pushups" },
+    fly: { name: "Chest Fly Machine", bodyParts: ["Chest"], secondaryMuscles: ["shoulders"] },
+    crossover: { name: "Low Cable Crossover", bodyParts: ["Chest"], secondaryMuscles: ["shoulders"] },
+    rearFly: { name: "Cable Rear Delt Fly", bodyParts: ["Shoulders"], secondaryMuscles: ["middle back", "traps"] },
+  };
+  const chest = map.summarize([
+    workout("2026-11-16", "pushup", 1, 8),
+    workout("2026-11-16", "press", 3, 8),
+    workout("2026-11-16", "crossover", 2, 11),
+    workout("2026-11-16", "fly", 2, 4),
+  ], chestCatalog);
+  assert.equal(chest.areas.Chest.primary, 8);
+  assert.equal(chest.areas.Chest.secondary, 0);
+  assert.equal(chest.areas.Shoulders.secondary, 8);
+  assert.equal(chest.areas.Chest.exercises.length, 4);
+  assert.equal(chest.areas.Chest.exercises.reduce((sum, ex) => sum + ex.sets, 0), 8);
+  const chestHtml = map.render(chest);
+  assert.ok(chestHtml.includes("Chest Fly Machine"));
+  assert.ok(chestHtml.includes("Low Cable Crossover"));
+  const rearFly = map.summarize([workout("2026-11-16", "rearFly", 2)], chestCatalog);
+  assert.equal(rearFly.areas.Shoulders.primary, 2);
+  assert.equal(rearFly.areas.Back.secondary, 2, "two back muscles must not double count assisting sets");
+}
 console.log(
   "Body-map checks passed: user-specific ranges, reps/time, primary/secondary deduplication, weekly calendar, preview state and safe accessible rendering.",
 );

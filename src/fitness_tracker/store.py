@@ -11,6 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .anatomy import classify, training_areas
+from .cardio import activity_name, validate_cardio_goal, weekly_cardio
 from .consistency import consistency, consistency_trend
 from .goals import with_goals
 from .sleep import sleep_days
@@ -28,6 +29,7 @@ DEFAULT_PROFILE = {
     "weekly_goal": 3,
     "protein_goal": 120,
     "creatine_goal": 5,
+    "cardio_goal": {"moderate": 0, "high": 0},
     "sleep_goal": 7,
     "night_hours_goal": 6,
     "night_sleep_goal": 6,
@@ -116,7 +118,10 @@ def validate(kind, raw):
     d = {
         "date": valid_date(raw.get("date")),
         "notes": text(
-            raw.get("notes", ""), "notes", 20000 if kind == "workout" else 4000, required=False
+            raw.get("notes", ""),
+            "notes",
+            20000 if kind in ("workout", "home_workout") else 4000,
+            required=False,
         ),
     }
     if kind == "plan":
@@ -131,7 +136,7 @@ def validate(kind, raw):
             "name": session_title(d["date"]),
             "exercises": [{"exercise_id": eid} for eid in dict.fromkeys(ids)],
         }
-    if kind in ("workout", "plan"):
+    if kind in ("workout", "home_workout", "plan"):
         d["name"] = session_title(d["date"])
         d["duration"] = number(raw.get("duration", 0), "Duration", 0, 1440)
         if not isinstance(raw.get("exercises"), list) or not 1 <= len(raw["exercises"]) <= 50:
@@ -140,6 +145,8 @@ def validate(kind, raw):
         for ex in raw["exercises"]:
             if not isinstance(ex, dict) or ex.get("exercise_id") not in EXERCISES:
                 raise ValueError("Select an exercise from the library.")
+            if kind == "home_workout" and EXERCISES[ex["exercise_id"]].get("category") == "cardio":
+                raise ValueError("Log aerobic activity separately in Cardio, not Home workouts.")
             sets = ex.get("sets")
             if not isinstance(sets, list) or not 1 <= len(sets) <= 30:
                 raise ValueError("Each exercise needs 1–30 sets.")
@@ -207,6 +214,14 @@ def validate(kind, raw):
                 if len(previous["sets"]) > 30:
                     raise ValueError("Each exercise can contain up to 30 sets.")
         d["exercises"] = list(grouped.values())
+    elif kind == "cardio":
+        if raw.get("intensity") not in ("moderate", "high"):
+            raise ValueError("Choose moderate or high cardio intensity.")
+        d.update(
+            activity=activity_name(raw.get("activity")),
+            minutes=number(raw.get("minutes"), "Cardio minutes", 0.1, 1440),
+            intensity=raw["intensity"],
+        )
     elif kind == "meal":
         d.update(
             description=text(raw.get("description"), "food description", 2000),
@@ -215,6 +230,8 @@ def validate(kind, raw):
             if raw.get("source") in ("manual", "ai")
             else "manual",
         )
+        if raw.get("calories") not in (None, ""):
+            d["calories"] = number(raw["calories"], "Calories (kcal)", 0, 10000)
         if raw.get("items") is not None:
             items = raw["items"]
             if not isinstance(items, list) or not 1 <= len(items) <= 50:
@@ -233,10 +250,18 @@ def validate(kind, raw):
                         ),
                     }
                 )
+                if item.get("calories") not in (None, ""):
+                    d["items"][-1]["calories"] = number(
+                        item["calories"], "Item calories (kcal)", 0, 10000
+                    )
             total = sum(item["protein"] for item in d["items"])
             precision = max(0, -Decimal(str(d["protein"])).normalize().as_tuple().exponent)
             if abs(total - d["protein"]) > 0.05 and round(total, precision) != d["protein"]:
                 raise ValueError("Meal item protein estimates do not add up to the total.")
+            if "calories" in d and all("calories" in item for item in d["items"]):
+                total_calories = sum(item["calories"] for item in d["items"])
+                if abs(total_calories - d["calories"]) > 1:
+                    raise ValueError("Meal item calorie estimates do not add up to the total.")
         for key in ("low", "high"):
             if raw.get(key) is not None:
                 d[key] = number(raw[key], key + " protein estimate", 0, 500)
@@ -382,6 +407,7 @@ class Store:
         with self.connect() as con:
             row = con.execute("SELECT data FROM settings WHERE key='profile'").fetchone()
         result = {**DEFAULT_PROFILE, **(json.loads(row[0]) if row else {})}
+        result["cardio_goal"] = validate_cardio_goal(result["cardio_goal"])
         result["supplements"] = supplement_options(result["supplements"])
         result["consistency_supplements"] = [
             n for n in result["consistency_supplements"] if n.casefold() != "creatine"
@@ -394,6 +420,7 @@ class Store:
             raise ValueError("Profile must be an object.")
         current = self.profile()
         result = {key: p.get(key, current[key]) for key in DEFAULT_PROFILE}
+        result["cardio_goal"] = validate_cardio_goal(result["cardio_goal"])
         for key in ("name", "focus", "experience", "constraints"):
             result[key] = text(result[key], key, 1000, False)
         if "goals" in p:
@@ -495,7 +522,7 @@ class Store:
                 entry.update(validate("plan", entry))
                 for key in ("duration", "notes"):
                     entry.pop(key, None)
-            if entry["kind"] in ("workout", "plan"):
+            if entry["kind"] in ("workout", "home_workout", "plan"):
                 entry["name"] = session_title(entry["date"])
         return sorted(
             entries,
@@ -517,6 +544,15 @@ class Store:
             )
             if raw.get("id") and not original:
                 raise ValueError("Entry no longer exists. Reopen the current day's workout.")
+            if (
+                original
+                and original[0] != kind
+                and (
+                    kind in ("workout", "home_workout")
+                    or original[0] in ("workout", "home_workout")
+                )
+            ):
+                raise ValueError("Edit the original gym or home workout in its own category.")
             if kind == "sleep":
                 others = [
                     json.loads(row[0])
@@ -705,7 +741,9 @@ class Store:
         for item in items:
             if not isinstance(item, dict) or item.get("kind") not in (
                 "meal",
+                "cardio",
                 "workout",
+                "home_workout",
                 "plan",
                 "supplement",
                 "creatine",
@@ -875,8 +913,12 @@ def insights(entries, profile, today=None):
         day = (today - timedelta(days=83 - i)).isoformat()
         daily[day] = {
             "protein": 0,
+            "calories": 0,
+            "calorie_meals": 0,
+            "cardio_minutes": 0,
             "creatine": 0,
             "workouts": 0,
+            "home_workouts": 0,
             "sets": 0,
             "meals": 0,
             "body": None,
@@ -889,15 +931,20 @@ def insights(entries, profile, today=None):
             if e["kind"] == "meal":
                 day["protein"] += e["protein"]
                 day["meals"] += 1
+                if e.get("calories") is not None:
+                    day["calories"] += e["calories"]
+                    day["calorie_meals"] += 1
+            if e["kind"] == "cardio":
+                day["cardio_minutes"] += e["minutes"]
             if is_creatine(e) and e["unit"] == "g":
                 day["creatine"] += e["amount"]
             if e["kind"] == "body":
                 if day["body"] is None:
                     day["body"] = e["weight_kg"]
-        if e["kind"] != "workout" or e["date"] > today.isoformat():
+        if e["kind"] not in ("workout", "home_workout") or e["date"] > today.isoformat():
             continue
         if day is not None:
-            day["workouts"] += 1
+            day["home_workouts" if e["kind"] == "home_workout" else "workouts"] += 1
         seen = set()
         for item in e["exercises"]:
             ex = EXERCISES[item["exercise_id"]]
@@ -958,7 +1005,11 @@ def insights(entries, profile, today=None):
         "daily": daily,
         "weekly_days": week_days,
         "week_start": start.isoformat(),
+        "cardio_week": weekly_cardio(entries, profile["cardio_goal"], today, today),
         "workouts": len(workouts),
+        "home_workouts": sum(
+            e["kind"] == "home_workout" and e["date"] <= today.isoformat() for e in entries
+        ),
         "prs": prs,
         "monthly": monthly,
         "muscles": muscles,

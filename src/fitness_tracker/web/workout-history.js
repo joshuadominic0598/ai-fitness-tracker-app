@@ -5,12 +5,12 @@
   function sessions(entries, day, excludeId) {
     return entries
       .filter(
-        (e) => e.kind === "workout" && e.date <= day && e.id !== excludeId,
+        (e) => ["workout", "home_workout"].includes(e.kind) && e.date <= day && e.id !== excludeId,
       )
       .sort((a, b) => b.date.localeCompare(a.date));
   }
-  function latestWorkout(entries, day, excludeId) {
-    return sessions(entries, day, excludeId)[0] || null;
+  function latestWorkout(entries, day, excludeId, kind = "workout") {
+    return sessions(entries, day, excludeId).find(e => e.kind === kind) || null;
   }
   function latestExercise(entries, id, day, excludeId) {
     for (const session of sessions(entries, day, excludeId)) {

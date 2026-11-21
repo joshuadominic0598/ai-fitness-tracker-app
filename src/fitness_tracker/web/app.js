@@ -38,6 +38,8 @@ const iconPaths = {
 const icon = (key) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${iconPaths[key] || iconPaths.overview}"/></svg>`;
 iconPaths.track = iconPaths.calendar;
+iconPaths.home = "M3 11 12 3l9 8M5 10v11h14V10M9 21v-7h6v7";
+iconPaths.cardio = "M3 12h4l3-8 4 16 3-8h4";
 const pages = {
   overview: "Overview",
   track: "Track",
@@ -281,23 +283,24 @@ function sessionTitle(value) {
 }
 function workoutRow(e) {
   const sets = e.exercises.reduce((a, x) => a + (x.sets?.length || 0), 0);
-  return `<div class="list-row"><span class="row-icon">${icon("workouts")}</span><div class="row-main"><h3>${esc(sessionTitle(e.date))}</h3><p>${e.exercises.length} exercise${e.exercises.length === 1 ? "" : "s"}${e.kind === "plan" ? " · " + e.exercises.map((x) => esc(byId[x.exercise_id]?.name || x.exercise_id)).join(", ") : ` · ${sets} set${sets === 1 ? "" : "s"}`}${e.duration ? " · " + n(e.duration) + " min" : ""}</p></div>${e.kind === "plan" ? button("Start", "start-plan", "soft", `data-id="${e.id}"`) : ""}<button class="link" data-action="edit-entry" data-id="${e.id}">View / edit ${icon("arrow")}</button></div>`;
+  return `<div class="list-row"><span class="row-icon">${icon("workouts")}</span><div class="row-main"><h3>${esc(sessionTitle(e.date))}</h3><p>${e.kind === "home_workout" ? "Home workout · " : e.kind === "workout" ? "Gym strength · " : ""}${e.exercises.length} exercise${e.exercises.length === 1 ? "" : "s"}${e.kind === "plan" ? " · " + e.exercises.map((x) => esc(byId[x.exercise_id]?.name || x.exercise_id)).join(", ") : ` · ${sets} set${sets === 1 ? "" : "s"}`}${e.duration ? " · " + n(e.duration) + " min" : ""}</p></div>${e.kind === "plan" ? button("Start", "start-plan", "soft", `data-id="${e.id}"`) : ""}<button class="link" data-action="edit-entry" data-id="${e.id}">View / edit ${icon("arrow")}</button></div>`;
 }
 function heatmap() {
   return `<div class="heatmap">${Object.entries(state.insights.daily)
     .map(
       ([d, v]) =>
-        `<button type="button" class="heat-cell ${v.workouts ? "done" : "rest"} ${v.workouts > 1 ? "multi" : ""} ${d === state.today ? "today" : ""}" data-action="activity-day" data-date="${d}" aria-label="${d}: ${v.workouts ? v.workouts + " workout" + (v.workouts === 1 ? "" : "s") : "Rest day, no workout logged"}. View day details or open in Track"></button>`,
+        `<button type="button" class="heat-cell ${v.workouts ? "done" : v.home_workouts ? "home" : "rest"} ${v.workouts > 1 ? "multi" : ""} ${d === state.today ? "today" : ""}" data-action="activity-day" data-date="${d}" aria-label="${d}: ${v.workouts ? v.workouts + " workout" + (v.workouts === 1 ? "" : "s") : v.home_workouts ? "Home workout, no gym day" : "Rest day, no workout logged"}. View day details or open in Track"></button>`,
     )
     .join(
       "",
-    )}</div><div class="heat-labels"><span>12 weeks ago</span><span>Each square is a day</span><span>Today</span></div><div class="habit-legend"><span><i class="gym-day" aria-hidden="true"></i>Workout day</span><span><i class="rest-day" aria-hidden="true"></i>Rest day · no workout logged</span></div>`;
+    )}</div><div class="heat-labels"><span>12 weeks ago</span><span>Each square is a day</span><span>Today</span></div><div class="habit-legend"><span><i class="gym-day" aria-hidden="true"></i>Workout day</span><span><i class="home-day" aria-hidden="true"></i>Home workout · no gym day</span><span><i class="rest-day" aria-hidden="true"></i>Rest day · no workout logged</span></div>`;
 }
 function habitDayDetails(day) {
   const entries = state.entries.filter(entry => entry.date === day);
   const workouts = entries.filter(entry => entry.kind === "workout");
+  const home = entries.filter(entry => entry.kind === "home_workout");
   const exercises = workouts.flatMap(entry => entry.exercises || []);
-  const areas = Object.values(BodyMap.summarize(workouts, byId).areas)
+  const areas = Object.values(BodyMap.summarize([...workouts, ...home], byId).areas)
     .filter(area => area.primary > 0)
     .sort((a, b) => b.primary - a.primary)
     .map(area => area.name);
@@ -319,7 +322,7 @@ function habitDayDetails(day) {
   const sleepText = sleep.logs.length
     ? `${n(sleep.total)} h total · ${n(sleep.night)} h night${sleep.total > sleep.night ? ` · ${n(sleep.total - sleep.night)} h naps` : ""}${sleep.known ? `<span>${n(sleep.continuous)} h uninterrupted</span>` : ""}`
     : "Not logged";
-  return `<div class="habit-day-heading"><h3>${esc(dateLabel(day, { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}</h3><span class="habit-day-badge ${workouts.length ? "gym-day" : "rest-day"}">${workouts.length ? "Workout day" : "Rest day"}</span></div><dl>${row("Workout", workout)}${workouts.length ? row("Focus areas", areas.length ? esc(areas.join(" · ")) : "Not specified") : ""}${row("Protein", protein)}${row("Creatine", creatineText)}${row("Supplements", supplementsText)}${row("Sleep", sleepText)}</dl><p>Click the day to open Track.</p>`;
+  return `<div class="habit-day-heading"><h3>${esc(dateLabel(day, { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}</h3><span class="habit-day-badge ${workouts.length ? "gym-day" : "rest-day"}">${workouts.length ? "Workout day" : home.length ? "Home workout day" : "Rest day"}</span></div><dl>${row("Workout", workout)}${home.length ? row("Home workouts", `${home.length} session(s) · ${home.reduce((sum, e) => sum + e.exercises.reduce((total, ex) => total + ex.sets.length, 0), 0)} sets · not a gym day`) : ""}${workouts.length || home.length ? row("Focus areas", areas.length ? esc(areas.join(" · ")) : "Not specified") : ""}${row("Protein", protein)}${row("Creatine", creatineText)}${row("Supplements", supplementsText)}${row("Sleep", sleepText)}</dl><p>Click the day to open Track.</p>`;
 }
 let habitTooltipCell = null, habitTooltipTimer;
 function hideHabitDetails() {
@@ -378,6 +381,10 @@ function dayEntries() {
     supplements,
     creatineEntries,
     workouts,
+    homeWorkouts: entries.filter(e => e.kind === "home_workout"),
+    cardio: entries.filter((e) => e.kind === "cardio"),
+    calories: meals.reduce((sum, e) => sum + (e.calories ?? 0), 0),
+    missingCalories: meals.filter((e) => e.calories == null).length,
     protein: meals.reduce((a, e) => a + e.protein, 0),
     creatine: creatineEntries
       .filter((e) => e.unit === "g")
@@ -465,7 +472,7 @@ function dayPlan() {
 }
 function previewEntryDetails(entry) {
   let summary = "";
-  if (entry.kind === "workout" || entry.kind === "plan")
+  if (["workout", "home_workout", "plan"].includes(entry.kind))
     summary = entry.exercises
       .map(
         (ex) =>
@@ -476,17 +483,19 @@ function previewEntryDetails(entry) {
     summary = [
       ...(entry.items || []).map(
         (item) =>
-          `${item.name} (${item.portion}): ≈${n(item.protein)} g protein${item.notes ? " · " + item.notes : ""}`,
+          `${item.name} (${item.portion}): ≈${n(item.protein)} g protein${item.calories != null ? ` · ≈${n(item.calories)} kcal` : ""}${item.notes ? " · " + item.notes : ""}`,
       ),
-      `${entry.items?.length ? "Total" : entry.description} · ${n(entry.protein)} g protein${entry.low != null && entry.high != null ? ` (estimate ${n(entry.low)}–${n(entry.high)} g)` : ""}`,
+      `${entry.items?.length ? "Total" : entry.description} · ${n(entry.protein)} g protein${entry.calories != null ? ` · ${n(entry.calories)} kcal` : " · calories not recorded"}${entry.low != null && entry.high != null ? ` (estimate ${n(entry.low)}–${n(entry.high)} g)` : ""}`,
     ].join("\n");
+  else if (entry.kind === "cardio")
+    summary = `${entry.activity} · ${n(entry.minutes)} min · ${entry.intensity} intensity`;
   else if (entry.kind === "supplement" || entry.kind === "creatine")
     summary = `${entry.name} · ${n(entry.amount)} ${entry.unit}`;
   else if (entry.kind === "sleep")
     summary = `${entry.period} sleep · ${n(entry.hours)} hours${entry.continuous_hours != null ? ` · ${n(entry.continuous_hours)} hours uninterrupted` : ""}`;
   else if (entry.kind === "body")
     summary = `Body weight · ${n(entry.weight_kg)} kg`;
-  return `<div class="preview-detail"><strong>${esc(sessionTitle(entry.date))} · ${entry.kind === "meal" ? "Food" : entry.kind === "body" ? "Body measurement" : esc(entry.kind)}</strong><p>${esc(summary)}</p>${entry.notes ? `<p class="small muted">${esc(entry.notes)}</p>` : ""}</div>`;
+  return `<div class="preview-detail"><strong>${esc(sessionTitle(entry.date))} · ${entry.kind === "meal" ? "Food" : entry.kind === "body" ? "Body measurement" : entry.kind === "home_workout" ? "Home workout" : esc(entry.kind)}</strong><p>${esc(summary)}</p>${entry.notes ? `<p class="small muted">${esc(entry.notes)}</p>` : ""}</div>`;
 }
 function previewMatches(entry, kind) {
   const category = GoalTracking.isCreatine(entry) ? "creatine" : entry.kind;
@@ -533,8 +542,10 @@ async function showAiPreview(id, summary = "") {
 }
 function openAiLogChooser() {
   const choices = [
-    ["workout", "Workout", "Exercises, sets, reps or time", "workouts"],
-    ["meal", "Food & protein", "Describe your meal and portions", "nutrition"],
+    ["workout", "Gym strength training", "Exercises, sets, reps or time", "workouts"],
+    ["home_workout", "Home workout", "Bodyweight or weights · does not count as a gym day", "home"],
+    ["cardio", "Cardio", "Sport or activity, minutes and felt intensity", "cardio"],
+    ["meal", "Food, protein & calories", "Describe your meal and portions", "nutrition"],
     ["creatine", "Creatine", "Log your intake in grams", "drop"],
     [
       "supplement",
@@ -562,8 +573,10 @@ async function openAiLog(kind = "any", revisionId = "") {
   }
   await closeModal();
   const prompts = {
+    home_workout: `Log my home workout for ${journalDate}. Keep this separate from gym workouts and cardio. Keep every exercise and set, ask for any missing reps or added weight, then prepare a preview for approval. I did:\n`,
     workout: `Log my workout for ${journalDate}. Keep every exercise and set; ask me if anything is unclear. Here is what I did:\n`,
-    meal: `Log my food for ${journalDate}. Estimate protein from my meal and portions, ask if needed, and prepare a preview for approval. I ate:\n`,
+    meal: `Log my food for ${journalDate}. Estimate protein in grams and calories in kcal for each food and the total from my meal and portions, ask if needed, and prepare a preview for approval. I ate:\n`,
+    cardio: `Log my cardio for ${journalDate}. Ask for the activity, minutes and overall felt intensity (moderate or high) if missing. Prepare a preview for approval. I did:\n`,
     creatine: `Log my creatine for ${journalDate}. Ask if the amount in grams is unclear, then prepare a preview for approval. I took:\n`,
     supplement: `Log my supplements for ${journalDate}. Use the amount and unit I give, or ask me to clarify. I took:\n`,
     sleep: `Log my sleep for rest day ${journalDate}. Ask for any essential missing information. I slept:\n`,
@@ -603,10 +616,10 @@ function dayBodyMap(workouts) {
   });
   return BodyMap.render(report, {
     id: "overview-body-map",
-    title: "This workout, on your body",
+    title: "This day’s strength training, on your body",
     subtitle: `${sessionTitle(journalDate)} · Hover, tap or focus a body area to explore.`,
     preview: activeAiPreview?.entries.some(
-      (e) => e.kind === "workout" && e.date === journalDate,
+      (e) => ["workout", "home_workout"].includes(e.kind) && e.date === journalDate,
     ),
   });
 }
@@ -615,7 +628,7 @@ function insightsBodyMapInner() {
   const range = BodyMap.period(day, bodyMapMode);
   const workouts = state.entries.filter(
     (e) =>
-      e.kind === "workout" &&
+      ["workout", "home_workout"].includes(e.kind) &&
       e.date >= range.start &&
       e.date <= range.end &&
       e.date <= state.today,
@@ -644,9 +657,13 @@ function insightsBodyMapInner() {
 function insightsBodyMap() {
   return `<div id="insights-body-map" class="section-space">${insightsBodyMapInner()}</div>`;
 }
+function homeWorkoutJournal(entries) {
+  const sets = entries.reduce((sum, e) => sum + e.exercises.reduce((total, ex) => total + ex.sets.length, 0), 0);
+  return `<section class="journal-home section-space" aria-label="Home workouts"><div class="card-head"><div><h3>Home workouts</h3><p>${entries.length} session${entries.length === 1 ? "" : "s"} · ${sets} set${sets === 1 ? "" : "s"}</p></div>${button(icon("home") + " Log home workout", "new-home-workout")}</div><p class="small muted">Bodyweight or weights, before or after the gym, or on another day. Adds to your body training and strength records; does not count as a gym day. Keep cardio separate.</p>${entries.length ? entries.map(dayWorkout).join("") : '<p class="small muted">A quick set counts too. Log push-ups, sit-ups, curls, presses and other strength exercises.</p>'}${verificationFooter("home_workout")}</section>`;
+}
 function dailyJournal() {
   const d = dayEntries();
-  return `<section class="card daily-journal" aria-label="Daily workout and nutrition journal"><div class="card-head journal-heading"><div><h2>${esc(sessionTitle(journalDate))}</h2></div><div class="journal-tools"><div class="actions journal-date-controls">${button("←", "journal-prev", "secondary", 'aria-label="Previous journal day"')}<label class="journal-date-label" for="journal-date">Journal date<input id="journal-date" type="date" min="1900-01-01" max="2050-12-31" required value="${journalDate}" aria-label="Journal date"></label>${button("→", "journal-next", "secondary", 'aria-label="Next journal day"')}${button("Today", "journal-today", "soft")}</div>${button(icon("coach") + " Log using AI", "ai-log-chooser")}</div></div><div class="grid equal"><div class="journal-panel"><div class="card-head"><div><h3>Your workout</h3><p>${d.workouts.length} session${d.workouts.length === 1 ? "" : "s"} · ${d.workouts.reduce((n, e) => n + e.exercises.reduce((s, x) => s + x.sets.length, 0), 0)} sets</p></div><div class="actions">${button(icon("plus") + (d.workouts.length ? " Edit workout" : " Log workout"), d.workouts.length ? "edit-entry" : "new-workout", "primary", d.workouts.length ? `data-id="${d.workouts[0].id}"` : "")}</div></div>${dayPlan()}${d.workouts.length ? d.workouts.map(dayWorkout).join("") : empty("Make room for movement", "Your workout for this day will appear here.")}${verificationFooter("workout")}</div><div class="journal-side"><section class="journal-panel journal-creatine" aria-label="Creatine tracking"><div class="card-head"><div><h3>Creatine</h3><p>${n(d.creatine)} g logged</p></div>${button(icon("plus") + " Log creatine", "new-creatine")}</div>${d.creatineEntries.length ? d.creatineEntries.map((e) => `<div class="list-row"><span class="row-icon">${icon("drop")}</span><div class="row-main">${n(e.amount)} g${e.notes ? ` · ${esc(e.notes)}` : ""}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No creatine logged for this day.</p>'}${verificationFooter("creatine")}</section><section class="journal-panel journal-supplements" aria-label="Supplement tracking"><div class="card-head"><h3>Supplements</h3><div class="actions">${button(icon("plus") + " Log supplement", "new-supplement")}</div></div>${d.supplements.length ? d.supplements.map((e) => `<div class="list-row"><div class="row-main">${esc(e.name)} · ${n(e.amount)} ${esc(e.unit)}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No supplements logged for this day.</p>'}${verificationFooter("supplement")}</section><div class="journal-panel journal-food"><div class="card-head"><div><h3>Protein</h3><p>${n(d.protein)} g protein</p></div><div class="actions">${button(icon("plus") + " Log food", "new-meal")}</div></div>${d.meals.length ? d.meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${activeAiPreview?.entries.some((entry) => entry.id === e.id) ? "AI preview · awaiting approval" : e.source === "ai" ? "Approved AI estimate" : "Manually logged"}</p></div><strong>${n(e.protein)} <small class="muted">g</small></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled this day?", "Add food here without leaving your workout journal.")}${verificationFooter("meal")}</div>${sleepJournal()}${
+  return `<section class="card daily-journal" aria-label="Daily workout and nutrition journal"><div class="card-head journal-heading"><div><h2>${esc(sessionTitle(journalDate))}</h2></div><div class="journal-tools"><div class="actions journal-date-controls">${button("←", "journal-prev", "secondary", 'aria-label="Previous journal day"')}<label class="journal-date-label" for="journal-date">Journal date<input id="journal-date" type="date" min="1900-01-01" max="2050-12-31" required value="${journalDate}" aria-label="Journal date"></label>${button("→", "journal-next", "secondary", 'aria-label="Next journal day"')}${button("Today", "journal-today", "soft")}</div>${button(icon("coach") + " Log using AI", "ai-log-chooser")}</div></div><div class="grid equal"><div class="journal-panel"><div class="card-head"><div><h3>Gym strength training</h3><p>${d.workouts.length} session${d.workouts.length === 1 ? "" : "s"} · ${d.workouts.reduce((n, e) => n + e.exercises.reduce((s, x) => s + x.sets.length, 0), 0)} sets</p></div><div class="actions">${button(icon("plus") + (d.workouts.length ? " Edit strength" : " Log strength"), d.workouts.length ? "edit-entry" : "new-workout", "primary", d.workouts.length ? `data-id="${d.workouts[0].id}"` : "")}</div></div>${dayPlan()}${d.workouts.length ? d.workouts.map(dayWorkout).join("") : empty("Make room for movement", "Your strength training for this day will appear here.")}${verificationFooter("workout")}${homeWorkoutJournal(d.homeWorkouts)}</div><div class="journal-side">${cardioJournal(d.cardio)}<div class="journal-panel journal-food"><div class="card-head"><div><h3>Food & nutrition</h3><p>${n(d.protein)} g protein · ${d.missingCalories === d.meals.length && d.meals.length ? "Calories unknown" : `${n(d.calories)} kcal`}${d.missingCalories ? ` · ${d.missingCalories} meal(s) missing calories` : ""}</p></div><div class="actions">${button(icon("plus") + " Log food", "new-meal")}</div></div>${d.meals.length ? d.meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${activeAiPreview?.entries.some((entry) => entry.id === e.id) ? "AI preview · awaiting approval" : e.source === "ai" ? "Approved AI estimate" : "Manually logged"}</p></div><strong class="meal-nutrients">${n(e.protein)} <small class="muted">g protein</small><br><span>${e.calories == null ? "Calories unknown" : `${n(e.calories)} kcal`}</span></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled this day?", "Add food here without leaving your workout journal.")}${verificationFooter("meal")}</div><section class="journal-panel journal-creatine" aria-label="Creatine tracking"><div class="card-head"><div><h3>Creatine</h3><p>${n(d.creatine)} g logged</p></div>${button(icon("plus") + " Log creatine", "new-creatine")}</div>${d.creatineEntries.length ? d.creatineEntries.map((e) => `<div class="list-row"><span class="row-icon">${icon("drop")}</span><div class="row-main">${n(e.amount)} g${e.notes ? ` · ${esc(e.notes)}` : ""}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No creatine logged for this day.</p>'}${verificationFooter("creatine")}</section><section class="journal-panel journal-supplements" aria-label="Supplement tracking"><div class="card-head"><h3>Supplements</h3><div class="actions">${button(icon("plus") + " Log supplement", "new-supplement")}</div></div>${d.supplements.length ? d.supplements.map((e) => `<div class="list-row"><div class="row-main">${esc(e.name)} · ${n(e.amount)} ${esc(e.unit)}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No supplements logged for this day.</p>'}${verificationFooter("supplement")}</section>${sleepJournal()}${
     activeAiPreview?.entries.some(
       (e) => e.kind === "body" && e.date === journalDate,
     )
@@ -655,7 +672,7 @@ function dailyJournal() {
           .map(previewEntryDetails)
           .join("")}${verificationFooter("body")}</div>`
       : ""
-  }</div></div>${dayBodyMap(d.workouts)}</section>`;
+  }</div></div>${dayBodyMap([...d.workouts, ...d.homeWorkouts])}</section>`;
 }
 function dashboardScoreTrend() {
   const series = (state.insights.consistency_trend || []).map((p) => ({
@@ -687,7 +704,8 @@ function activityCalendarInner() {
     state.today,
   );
   const label = {
-    workout: "Gym days",
+    workout: "Strength training",
+    cardio: "Cardio",
     protein: "Protein",
     creatine: "Creatine",
     supplements: "Supplements",
@@ -695,7 +713,8 @@ function activityCalendarInner() {
   }[dashboardMetric];
   return `<div class="card-head"><div><div class="eyebrow">SMALL STEPS, EVERY DAY</div><h2>Your activity calendar</h2></div><label class="sr-only" for="activity-metric">Calendar metric</label><select id="activity-metric" aria-label="Calendar metric">${Object.entries(
     {
-      workout: "Gym days",
+      workout: "Strength training",
+      cardio: "Cardio",
       protein: "Protein goal",
       creatine: "Creatine goal",
       supplements: "Supplements",
@@ -708,7 +727,7 @@ function activityCalendarInner() {
     )
     .join(
       "",
-    )}</select></div><div class="activity-month-controls">${button("←", "activity-prev", "secondary", 'aria-label="Previous activity month"')}<input id="activity-month" aria-label="Activity month" type="month" min="1900-01" max="2050-12" required value="${month}">${button("→", "activity-next", "secondary", 'aria-label="Next activity month"')}</div><div class="activity-weekdays">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Weekly score"].map((d) => `<span>${d}</span>`).join("")}</div><div class="activity-days">${data.weeks.map((w) => w.days.map((d) => activityDayHtml(d, label)).join("") + weeklyScoreHtml(w)).join("")}</div><div class="activity-legend">${dashboardMetric === "supplements" ? '<span><i class="building"></i>Weekly progress</span><span><i class="met"></i>90%+ of weekly targets</span>' : '<span><i class="unlogged"></i>No log / rest</span><span><i class="critical"></i>Below 25%</span><span><i class="low"></i>25–49%</span><span><i class="mid"></i>50–64%</span><span><i class="partial"></i>65–79%</span><span><i class="near"></i>80–94%</span><span><i class="met"></i>95%+</span>'}</div><p class="dashboard-note">${data.loggedDays} ${label.toLowerCase()} ${dashboardMetric === "workout" ? "" : "days "}logged this month. Select a day to open Track.${dashboardMetric === "supplements" ? " Days show cumulative weekly target completion. Weeks turn green at 90%." : dashboardMetric !== "workout" ? " Weekly score uses all seven days; missing and future days count as zero." : " Weekly score compares gym days with your weekly target."} Weeks run Monday–Sunday, including days in adjacent months.</p>`;
+    )}</select></div><div class="activity-month-controls">${button("←", "activity-prev", "secondary", 'aria-label="Previous activity month"')}<input id="activity-month" aria-label="Activity month" type="month" min="1900-01" max="2050-12" required value="${month}">${button("→", "activity-next", "secondary", 'aria-label="Next activity month"')}</div><div class="activity-weekdays">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Weekly score"].map((d) => `<span>${d}</span>`).join("")}</div><div class="activity-days">${data.weeks.map((w) => w.days.map((d) => activityDayHtml(d, label)).join("") + weeklyScoreHtml(w)).join("")}</div><div class="activity-legend">${["supplements", "cardio"].includes(dashboardMetric) ? '<span><i class="building"></i>Weekly progress</span><span><i class="met"></i>Weekly goal reached</span>' : '<span><i class="unlogged"></i>No log / rest</span><span><i class="critical"></i>Below 25%</span><span><i class="low"></i>25–49%</span><span><i class="mid"></i>50–64%</span><span><i class="partial"></i>65–79%</span><span><i class="near"></i>80–94%</span><span><i class="met"></i>95%+</span>'}</div><p class="dashboard-note">${data.loggedDays} ${label.toLowerCase()} ${dashboardMetric === "workout" ? "" : "days "}logged this month. Select a day to open Track.${dashboardMetric === "cardio" ? " Days show cumulative weekly cardio credit. High-intensity minutes count twice; weeks turn green at 100%." : dashboardMetric === "supplements" ? " Days show cumulative weekly target completion. Weeks turn green at 90%." : dashboardMetric !== "workout" ? " Weekly score uses all seven days; missing and future days count as zero." : " Weekly score compares gym days with your weekly target."} Weeks run Monday–Sunday, including days in adjacent months.</p>`;
 }
 function updateActivityCalendar() {
   $("#dashboard-activity").innerHTML = activityCalendarInner();
@@ -736,6 +755,9 @@ function updateReviewPanels(focusSelector) {
   if (weekly) weekly.outerHTML = weeklyGoalsPanel();
   for (const panel of document.querySelectorAll(".nutrition-metrics")) {
     panel.outerHTML = nutritionMetrics(panel.id);
+  }
+  for (const panel of document.querySelectorAll(".cardio-summary")) {
+    panel.outerHTML = cardioPanel();
   }
   if (focusSelector) queueMicrotask(() => $(focusSelector)?.focus());
 }
@@ -779,19 +801,19 @@ function weeklyGoalsPanel() {
 }
 function overview() {
   const workouts = state.entries
-    .filter((e) => e.kind === "workout" && e.date <= state.today)
+    .filter((e) => ["workout", "home_workout"].includes(e.kind) && e.date <= state.today)
     .sort((a, b) => b.date.localeCompare(a.date));
   const latest = workouts[0];
   const body = latest
     ? BodyMap.render(
-        BodyMap.summarize([latest], byId, state.entries, {
+        BodyMap.summarize(workouts.filter(e => e.date === latest.date), byId, state.entries, {
           end: latest.date,
           mode: "day",
         }),
         {
           id: "dashboard-body-map",
-          title: "Your latest workout, mapped",
-          subtitle: `${sessionTitle(latest.date)} · Hover or tap a body area.`,
+          title: "Your latest training day, mapped",
+          subtitle: `${sessionTitle(latest.date)} · Gym and home strength training · Hover or tap a body area.`,
           controls: button(
             "Open this day ↗",
             "activity-day",
@@ -801,14 +823,14 @@ function overview() {
         },
       )
     : "";
-  return `<div class="dashboard-grid"><section class="card dashboard-calendar" id="dashboard-activity">${activityCalendarInner()}</section><aside class="card dashboard-habit" aria-label="Training habits"><div class="card-head"><div><h2>The habit of showing up</h2><p>Your training days over the last 12 weeks</p></div></div>${heatmap()}</aside></div><div class="overview-metrics">${consistencyScores(true)}</div>${weeklyGoalsPanel()}${nutritionMetrics("overview-intake")}${body}${dashboardScoreTrend()}`;
+  return `<div class="dashboard-grid"><section class="card dashboard-calendar" id="dashboard-activity">${activityCalendarInner()}</section><aside class="card dashboard-habit" aria-label="Training habits"><div class="card-head"><div><h2>The habit of showing up</h2><p>Gym and home strength training over the last 12 weeks</p></div></div>${heatmap()}</aside></div><div class="overview-metrics">${consistencyScores(true)}</div>${weeklyGoalsPanel()}${cardioPanel()}${nutritionMetrics("overview-intake")}${body}${dashboardScoreTrend()}`;
 }
 function track() {
   const history = state.entries
-    .filter((e) => e.kind === "workout" || e.kind === "plan")
+    .filter((e) => ["workout", "home_workout", "plan"].includes(e.kind))
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 30);
-  return `<div class="track-page-heading"><h1>Track your day</h1>${button("Plan a session", "new-plan", "secondary")}</div>${dailyJournal()}<details class="card track-history"><summary>Recent workouts & session plans</summary><p class="small muted">Your 30 most recent sessions and plans. Use the date picker to open any other day.</p>${history.length ? history.map(workoutRow).join("") : "<p class=muted>Your session history will appear here.</p>"}</details>`;
+  return `<div class="track-page-heading"><h1>Track your day</h1>${button("Plan a session", "new-plan", "secondary")}</div>${dailyJournal()}<details class="card track-history"><summary>Recent gym & home workouts and session plans</summary><p class="small muted">Your 30 most recent sessions and plans. Use the date picker to open any other day.</p>${history.length ? history.map(workoutRow).join("") : "<p class=muted>Your session history will appear here.</p>"}</details>`;
 }
 function workouts() {
   const entries = state.entries
@@ -832,9 +854,22 @@ function workouts() {
 function monthCoverage() {
   return GoalTracking.monthCoverage(state.entries, journalDate, state.today);
 }
+function cardioRow(entry) {
+  return `<div class="list-row"><span class="row-icon">${icon("cardio")}</span><div class="row-main"><h3>${esc(entry.activity)}</h3><p>${n(entry.minutes)} min · ${entry.intensity === "high" ? "High / vigorous" : "Moderate"} intensity${entry.notes ? ` · ${esc(entry.notes)}` : ""}</p></div><button class="link" data-action="edit-entry" data-id="${entry.id}">Edit</button></div>`;
+}
+function cardioJournal(entries) {
+  return `<section class="journal-panel journal-cardio" aria-label="Cardio tracking"><div class="card-head"><div><h3>Cardio</h3><p>${n(entries.reduce((sum, e) => sum + e.minutes, 0))} min · ${entries.length} session${entries.length === 1 ? "" : "s"}</p></div>${button(icon("plus") + " Log cardio", "new-cardio")}</div>${entries.length ? entries.map(cardioRow).join("") : '<p class="small muted">Sports, games and aerobic exercise. Log minutes and how intense it felt.</p>'}${verificationFooter("cardio")}</section>`;
+}
+function cardioPanel() {
+  const reference = reviewDate || state.today;
+  const goal = state.profile.cardio_goal || { moderate: 0, high: 0 };
+  const p = GoalTracking.cardioProgress(state.entries, goal, reference, state.today, state.cardio_high_weight || 2);
+  const logs = state.entries.filter(e => e.kind === "cardio" && e.date >= p.start && e.date <= p.end && e.date <= state.today);
+  return `<section class="card cardio-summary section-space" id="weekly-cardio" aria-label="Weekly cardio progress"><div class="card-head"><div><div class="eyebrow">MOVE YOUR WAY</div><h2>Your weekly cardio</h2><p>${goalRange(p)} · Monday–Sunday</p></div>${reviewWeekControls("cardio-week")}<button class="link" data-page="goals">Set cardio goal ↗</button></div><div class="cardio-week-stats"><div><span>Moderate intensity</span><strong>${n(p.moderate)} <small>min</small></strong></div><div><span>High / vigorous intensity</span><strong>${n(p.high)} <small>min</small></strong></div><div><span>Combined goal credit</span><strong>${n(p.value)} <small>${p.target ? `/ ${n(p.target)}` : ""} moderate-equivalent min</small></strong></div><div><span>Weekly goal</span><strong>${p.percent == null ? "Not set" : `${n(p.percent)}%`}</strong></div></div>${p.target ? `<div class="supplement-week-meter" role="progressbar" aria-label="Weekly cardio goal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(100, p.percent))}"><span style="width:${Math.min(100, p.percent)}%"></span></div><p class="small muted">${p.remaining ? `${n(p.remaining)} more moderate minutes or ${n(p.remaining / 2)} high-intensity minutes to reach your goal.` : "Weekly cardio goal reached."} Target: ${n(goal.moderate)} moderate + ${n(goal.high)} high-intensity minutes; either intensity can substitute.</p>` : '<p class="small muted">Set a weekly target to track goal completion.</p>'}<p class="muscle-note">1 high-intensity minute counts as 2 moderate minutes. Actual minutes stay separate from goal credit. Cardio does not add strength-training days.</p>${logs.length ? `<details><summary>${logs.length} cardio session${logs.length === 1 ? "" : "s"} this week</summary>${logs.sort((a, b) => b.date.localeCompare(a.date)).map(e => `<p class="small muted">${dateLabel(e.date)}</p>${cardioRow(e)}`).join("")}</details>` : ""}</section>`;
+}
 function nutritionMetrics(id = "insights-intake") {
   const reference = reviewDate || state.today;
-  return `<section class="card nutrition-metrics section-space" id="${id}" aria-label="Nutrition attainment percentages"><div class="card-head"><div><h2>Your intake, in perspective</h2><p>Quantity and timing, alongside your consistency score.</p></div>${reviewWeekControls(id)}<button class="link" data-page="goals">Adjust targets ↗</button></div><div class="intake-metric-grid">${[
+  return `<section class="card nutrition-metrics section-space" id="${id}" aria-label="Nutrition intake and attainment"><div class="card-head"><div><h2>Your intake, in perspective</h2><p>Quantity and timing, alongside your consistency score.</p></div>${reviewWeekControls(id)}<button class="link" data-page="goals">Adjust targets ↗</button></div><div class="intake-metric-grid">${[
     "protein",
     "creatine",
   ]
@@ -848,13 +883,17 @@ function nutritionMetrics(id = "insights-intake") {
         { historyPeriod: "week" },
       );
       const pct = (value) => (value === null ? "—" : `${n(value)}%`);
-      return `<article class="intake-metric-card"><h3>${key === "protein" ? "Protein" : "Creatine"}</h3><div class="quantity-pair"><div><span>${m.isDailyGoal ? "Daily attainment" : "Daily reference"} · ${dateLabel(reference)}</span><strong>${pct(m.day.percent)}</strong><p>${n(m.day.value)} / ${n(m.day.target)} g</p></div><div><span>Weekly quantity · ${goalRange(m.week)}</span><strong>${pct(m.week.percent)}</strong><p>${n(m.week.value)} / ${n(m.week.target)} g · ${m.week.open ? "in progress" : "completed"}</p></div><div><span>Monthly quantity · ${goalRange(m.month)}</span><strong>${pct(m.month.percent)}</strong><p>${n(m.month.value)} / ${n(m.month.target)} g · ${m.month.loggedDays}/${m.month.days} days logged</p></div></div><div class="quantity-history"><div><span>Quantity coverage</span><strong>${pct(m.history.percent)}</strong></div><div><span>Average daily attainment</span><strong>${pct(m.history.attainment)}</strong></div><div><span>${m.isDailyGoal ? "Exact daily goal hits" : "Daily reference reached"}</span><strong>${m.history.met} / ${m.history.days}<small> completed days</small></strong></div></div><p class="muscle-note">${m.history.days ? `${goalRange({ start: m.history.start, end: m.history.end })} · ${m.history.loggedDays} logged of ${m.history.days} completed days` : "No completed days in this selected week"}. Today is excluded. ${!m.isDailyGoal ? "Daily and weekly references divide your chosen target across its timeframe; they are guides, not extra goals." : ""}</p></article>`;
+      return `<article class="intake-metric-card"><h3>${key === "protein" ? "Protein" : "Creatine"}</h3><div class="quantity-pair"><div><span>${m.isDailyGoal ? "Daily attainment" : "Daily reference"} · ${dateLabel(reference)}</span><strong>${pct(m.day.percent)}</strong><p>${n(m.day.value)} / ${n(m.day.target)} g</p></div><div><span>Weekly quantity · ${goalRange(m.week)}</span><strong>${pct(m.week.percent)}</strong><p>${n(m.week.value)} / ${n(m.week.target)} g · ${m.week.open ? "in progress" : "completed"}</p></div><div><span>Monthly quantity · ${goalRange(m.month)}</span><strong>${pct(m.month.percent)}</strong><p>${n(m.month.value)} / ${n(m.month.target)} g · ${m.month.loggedDays}/${m.month.days} days logged</p></div></div><div class="quantity-history"><div><span>Average daily intake</span><strong>${m.history.average === null ? "—" : `${n(m.history.average)} g/day`}</strong></div><div><span>Quantity coverage</span><strong>${pct(m.history.percent)}</strong></div><div><span>Average daily attainment</span><strong>${pct(m.history.attainment)}</strong></div><div><span>${m.isDailyGoal ? "Exact daily goal hits" : "Daily reference reached"}</span><strong>${m.history.met} / ${m.history.days}<small> completed days</small></strong></div></div><p class="muscle-note">${m.history.days ? `${goalRange({ start: m.history.start, end: m.history.end })} · ${m.history.loggedDays} logged of ${m.history.days} completed days` : "No completed days in this selected week"}. Today is excluded. ${!m.isDailyGoal ? "Daily and weekly references divide your chosen target across its timeframe; they are guides, not extra goals." : ""}</p></article>`;
     })
     .join(
       "",
-    )}</div><p class="muscle-note">Quantity percentages can exceed 100%. Average daily attainment caps each day at 100%, so a high day does not erase a low day. Weekly quantity uses the total logged for that week, allowing intake to vary across days. Missing completed days count as zero logged intake. Your consistency score separately allows for short breaks.</p></section>`;
+    )}${calorieIntakeCard(reference)}</div><p class="muscle-note">Quantity percentages can exceed 100%. Average daily attainment caps each day at 100%, so a high day does not erase a low day. Weekly quantity uses the total logged for that week, allowing intake to vary across days. Average daily intake divides total grams by completed days in the selected week, without capping high days. Missing completed days count as zero logged intake. Your consistency score separately allows for short breaks.</p></section>`;
 }
-
+function calorieIntakeCard(reference) {
+  const m = GoalTracking.calorieMetrics(state.entries, reference, state.today);
+  const quantity = (row) => row.missing && row.missing === row.meals ? "—" : n(row.value);
+  return `<article class="intake-metric-card calorie-intake-card"><h3>Calories consumed</h3><div class="quantity-pair">${[["Daily intake", m.day, dateLabel(reference)], ["Weekly intake", m.week, goalRange(m.week)], ["Monthly intake", m.month, goalRange(m.month)]].map(([label, row, range]) => `<div><span>${label} · ${range}</span><strong>${quantity(row)} <small>kcal</small></strong><p>${row.missing ? `${row.missing} meal${row.missing === 1 ? "" : "s"} missing calories · total incomplete` : `${row.meals} meal${row.meals === 1 ? "" : "s"} with calories`}</p></div>`).join("")}</div><div class="quantity-history"><div><span>Average daily intake</span><strong>${m.history.average == null ? "—" : `${n(m.history.average)} kcal/day`}</strong></div></div><p class="muscle-note">${m.history.days ? `${goalRange(m.history)} · ${m.history.days} completed days. Today is excluded.` : "No completed days in this selected week."} ${m.history.missing ? "Add calories to older meals to calculate a complete average." : "Missing completed days count as zero logged intake."} Calories are tracked separately from protein; older meals without calories remain unknown.</p></article>`;
+}
 function nutrition() {
   const p = state.profile,
     entries = state.entries.filter((e) => e.date === journalDate),
@@ -868,7 +907,7 @@ function nutrition() {
       button("Describe a meal to AI", "ask-food", "secondary") +
         button(icon("plus") + " Log food", "new-meal"),
     ) +
-    `<div class="toolbar"><label for="nutrition-date">YOUR DAILY JOURNAL</label><input id="nutrition-date" type="date" min="1900-01-01" max="2050-12-31" value="${journalDate}" aria-label="Nutrition date"></div><p class="muscle-note" style="margin-bottom:16px">Choose any day to log or review food and supplements. Overview lets you log these alongside your workout.</p><div class="stats">${intakeGoalStat("protein")}${intakeGoalStat("creatine")}${stat("Food days logged", monthCoverage().foodDays, `/ ${monthCoverage().days}`, `${dateLabel(journalDate, { month: "long", year: "numeric" })} · includes partial days`, "check")}${stat("Creatine days logged", monthCoverage().creatineDays, `/ ${monthCoverage().days}`, `${dateLabel(journalDate, { month: "long", year: "numeric" })} · any amount logged`, "calendar")}</div>${nutritionMetrics()}${consistencyScores()}<div class="grid cols-2"><div class="card"><div class="card-head"><h2>On your plate</h2><span class="pill">${dateLabel(journalDate)}</span></div>${meals.length ? meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${e.source === "ai" ? "AI estimate · approved by you" : "Manually logged"}${e.low !== undefined ? " · range " + n(e.low) + "–" + n(e.high) + " g" : ""}</p></div><strong>${n(e.protein)} <small class="muted">g</small></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled you today?", "Add a meal manually or describe what you ate to your AI coach.", button("Add food", "new-meal", "soft"))}</div><div class="card"><div class="card-head"><h2>Your supplement routine</h2><button class="link" data-action="new-supplement">Log supplement +</button></div>${p.supplements
+    `<div class="toolbar"><label for="nutrition-date">YOUR DAILY JOURNAL</label><input id="nutrition-date" type="date" min="1900-01-01" max="2050-12-31" value="${journalDate}" aria-label="Nutrition date"></div><p class="muscle-note" style="margin-bottom:16px">Choose any day to log or review food and supplements. Overview lets you log these alongside your workout.</p><div class="stats">${intakeGoalStat("protein")}${intakeGoalStat("creatine")}${stat("Food days logged", monthCoverage().foodDays, `/ ${monthCoverage().days}`, `${dateLabel(journalDate, { month: "long", year: "numeric" })} · includes partial days`, "check")}${stat("Creatine days logged", monthCoverage().creatineDays, `/ ${monthCoverage().days}`, `${dateLabel(journalDate, { month: "long", year: "numeric" })} · any amount logged`, "calendar")}</div>${nutritionMetrics()}${consistencyScores()}<div class="grid cols-2"><div class="card"><div class="card-head"><h2>On your plate</h2><span class="pill">${dateLabel(journalDate)}</span></div>${meals.length ? meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${e.source === "ai" ? "AI estimate · approved by you" : "Manually logged"}${e.low !== undefined ? " · range " + n(e.low) + "–" + n(e.high) + " g" : ""}</p></div><strong class="meal-nutrients">${n(e.protein)} <small class="muted">g protein</small><br><span>${e.calories == null ? "Calories unknown" : `${n(e.calories)} kcal`}</span></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled you today?", "Add a meal manually or describe what you ate to your AI coach.", button("Add food", "new-meal", "soft"))}</div><div class="card"><div class="card-head"><h2>Your supplement routine</h2><button class="link" data-action="new-supplement">Log supplement +</button></div>${p.supplements
       .map((name) => {
         let logged = supps.filter(
           (e) => e.name.toLowerCase() === name.toLowerCase(),
@@ -1108,6 +1147,7 @@ function progress() {
     exerciseRecords() +
     trainingDetail() +
     sleepInsights() +
+    cardioPanel() +
     nutritionMetrics() +
     `<div class="grid cols-2"><div class="card" id="strength-chart-card"><div class="card-head"><div><h2>Your strength, over time</h2><p>Monthly best logged ${metric === "kg" ? "load" : metric} · last 12 months</p></div><span class="pill gold">PERSONAL RECORDS</span></div>${ids.length ? `<select id="pr-select" class="full-width" aria-label="Exercise for PR chart">${ids.map((id) => `<option value="${id}" ${id === prId ? "selected" : ""}>${esc(byId[id].name)}</option>`).join("")}</select><div class="section-space"><strong class="pr-value">${n(pr.weight || pr.reps || pr.seconds)} <small class="muted">${metric}</small></strong><p class="small muted">${pr.weight ? n(pr.reps) + " reps at your best load · " : ""}Best logged · ${dateLabel(metric === "seconds" ? pr.seconds_date || pr.date : pr.date, { month: "short", day: "numeric", year: "numeric" })}</p></div>${chart(months, { unit: metric, line: true, label: ex.name + " monthly personal record" })}${pr.estimated_1rm ? `<p class="muscle-note">Estimated 1RM: ${n(pr.estimated_1rm)} kg (Epley, sets of 1–10 reps). This estimate is separate from your actual best load.</p>` : ""}<p class="muscle-note">Weights are recorded per your chosen convention. Use the same convention for dumbbells and assisted machines. Empty months are gaps.</p>` : empty("Your first PR is ahead of you", "Log sets to see your best loads, reps and monthly changes.")}</div><div class="card"><div class="card-head"><div><h2>Your training balance</h2><p>Body-part sets · last 28 days</p></div></div>${muscles()}<p class="muscle-note">Volume alone does not measure growth. Use this to notice your training emphasis.</p></div></div>` +
     `<div class="grid equal section-space"><div class="card" id="intake-panel">${intakePanel()}</div><div class="card"><div class="card-head"><div><h2>Exercises you come back to</h2><p>Sessions including each exercise · last 28 days</p></div></div>${frequency.length ? frequency.map(([id, count], i) => `<div class="list-row"><span class="pill">0${i + 1}</span><img src="${image(id)}" width="42" height="37" style="object-fit:contain" alt="${esc(byId[id].name)}"><div class="row-main"><h3>${esc(byId[id].name)}</h3><p>${esc((byId[id].bodyParts || byId[id].primaryMuscles).join(", "))}</p></div><strong>${count}<small class="muted"> sessions</small></strong></div>`).join("") : empty("Your favorites will find you", "Your most repeated exercises appear as you log sessions.")}</div></div><div class="section-space"><div class="card"><div class="card-head"><div><h2>Body weight journal</h2><p>Logged measurements · last 12 weeks</p></div>${button("+ Log", "new-body", "soft")}</div>${body.length ? chart(body, { unit: "kg", line: true, label: "Logged body weight" }) : empty("An optional piece of your story", "Add body weight measurements if this is useful for your goals.")}${
@@ -1126,21 +1166,21 @@ function progress() {
 function intakePanel() {
   const points = Dashboard.intakeSeries(state.entries, intakeMetric, intakePeriod, state.today);
   const range = points.length ? `${dateLabel(points[0].start, { month: "short", day: "numeric", year: "numeric" })} – ${dateLabel(points[points.length - 1].end > state.today ? state.today : points[points.length - 1].end, { month: "short", day: "numeric", year: "numeric" })}` : "No entries yet";
-  return `<div class="card-head intake-chart-head"><div><h2>Protein & creatine rhythm</h2><p>${intakePeriod === "weekly" ? "Weekly totals" : "Daily totals"} · ${points.length} recorded ${intakePeriod === "weekly" ? "weeks" : "days"} · ${esc(range)}</p></div><div class="intake-chart-controls"><div class="tabs" role="group" aria-label="Intake chart timeframe">${["daily", "weekly"].map(period => `<button type="button" class="tab ${intakePeriod === period ? "active" : ""}" data-action="intake-period" data-period="${period}" aria-pressed="${intakePeriod === period}">${period === "daily" ? "Daily" : "Weekly"}</button>`).join("")}</div><select id="intake-metric" aria-label="Intake metric"><option value="protein" ${intakeMetric === "protein" ? "selected" : ""}>Protein · g</option><option value="creatine" ${intakeMetric === "creatine" ? "selected" : ""}>Creatine · g</option></select></div></div><div id="intake-chart">${intakeChart(intakeMetric)}</div><p class="muscle-note">${intakePeriod === "weekly" ? "Monday–Sunday totals; the current week is still in progress." : "Each point totals all entries logged for that day."} Only ${intakePeriod === "weekly" ? "weeks" : "days"} with entries are plotted; missing logs do not mean zero intake. Showing the latest 20 recorded ${intakePeriod === "weekly" ? "weeks" : "days"} at most. The dashed line shows your ${intakePeriod === "weekly" ? "weekly" : "daily"} goal reference.</p>`;
+  return `<div class="card-head intake-chart-head"><div><h2>Your intake rhythm</h2><p>${intakePeriod === "weekly" ? "Weekly totals" : "Daily totals"} · ${points.length} recorded ${intakePeriod === "weekly" ? "weeks" : "days"} · ${esc(range)}</p></div><div class="intake-chart-controls"><div class="tabs" role="group" aria-label="Intake chart timeframe">${["daily", "weekly"].map(period => `<button type="button" class="tab ${intakePeriod === period ? "active" : ""}" data-action="intake-period" data-period="${period}" aria-pressed="${intakePeriod === period}">${period === "daily" ? "Daily" : "Weekly"}</button>`).join("")}</div><select id="intake-metric" aria-label="Intake metric"><option value="protein" ${intakeMetric === "protein" ? "selected" : ""}>Protein · g</option><option value="creatine" ${intakeMetric === "creatine" ? "selected" : ""}>Creatine · g</option><option value="calories" ${intakeMetric === "calories" ? "selected" : ""}>Calories · kcal</option></select></div></div><div id="intake-chart">${intakeChart(intakeMetric)}</div><p class="muscle-note">${intakePeriod === "weekly" ? "Monday–Sunday totals; the current week is still in progress." : "Each point totals all entries logged for that day."} Only ${intakePeriod === "weekly" ? "weeks" : "days"} with entries are plotted; missing logs do not mean zero intake. Showing the latest 20 recorded ${intakePeriod === "weekly" ? "weeks" : "days"} at most. ${intakeMetric === "calories" ? "Calorie totals include only meals with calories recorded; older meals may be missing." : `The dashed line shows your ${intakePeriod === "weekly" ? "weekly" : "daily"} goal reference.`}</p>`;
 }
 function intakeChart(metric) {
   const points = Dashboard.intakeSeries(state.entries, metric, intakePeriod, state.today);
-  if (!points.length) return empty("No intake entries yet", "Log protein or creatine to see your trend.");
+  if (!points.length) return empty("No intake entries yet", "Log protein, calories or creatine to see your trend.");
   const data = points.map(point => ({
     value: point.value,
     short: dateLabel(point.start, { month: "short", day: "numeric" }),
     label: intakePeriod === "weekly" ? `${point.start} – ${point.end}${point.end >= state.today && point.start <= state.today ? " (in progress)" : ""}` : point.start,
   }));
-  const reference = GoalTracking.intakeMetrics(state.entries, metric, state.profile.goals[metric], state.today, state.today);
+  const reference = metric === "calories" ? null : GoalTracking.intakeMetrics(state.entries, metric, state.profile.goals[metric], state.today, state.today);
   return chart(data, {
-    unit: "g",
+    unit: metric === "calories" ? "kcal" : "g",
     line: true,
-    goal: intakePeriod === "weekly" ? reference.week.target : reference.day.target,
+    goal: reference ? (intakePeriod === "weekly" ? reference.week.target : reference.day.target) : undefined,
     label: `${intakePeriod === "weekly" ? "Weekly" : "Daily"} ${metric} intake, latest ${data.length} recorded points`,
   });
 }
@@ -1500,7 +1540,7 @@ async function testCoachConnection(provider, status) {
 
 const coachStarters = [
   { title: "Log/Plan Workout", hint: "Choose a day · review before saving", icon: "workouts", prompt: "Help me log or plan my workout. " },
-  { title: "Protein/Creatine", hint: "Estimate food or log your intake", icon: "nutrition", prompt: "Help me with protein or creatine. " },
+  { title: "Food & intake", hint: "Estimate protein and calories or log your intake", icon: "nutrition", prompt: "Help me with food calories, protein or creatine. " },
   { title: "Supplements/Sleep Logging", hint: "Use your goals and preferred units", icon: "sleep", prompt: "Help me log supplements or sleep. " },
   { title: "Learn an exercise", hint: "Steps, cues, mistakes & a short video", icon: "exercises", prompt: "Help me learn this exercise with simple steps, form cues and common mistakes: " },
   { title: "Assess my progress", hint: "Workouts · intake & recovery", icon: "progress", prompt: "Assess my progress" },
@@ -1728,13 +1768,18 @@ async function refreshSupplementUnit(preserveExisting = false) {
     /* Cached goals remain usable if a background refresh fails. */
   }
 }
+function cardioGoalCard() {
+  const goal = state.profile.cardio_goal || { moderate: 0, high: 0 };
+  const p = GoalTracking.cardioProgress(state.entries, goal, state.today, state.today);
+  return `<section class="card goal-card cardio-goal-card"><div class="card-head"><span class="row-icon">${icon("cardio")}</span><h2>Cardio</h2></div><div class="cardio-goal-content"><div class="cardio-goal-fields"><p class="small muted">Weekly target · Monday–Sunday. Enter either intensity or combine both.</p><div class="cardio-goal-inputs"><div class="field"><label for="goal-cardio-moderate">Moderate-intensity minutes per week</label><input id="goal-cardio-moderate" name="cardio_moderate" type="number" min="0" max="10080" step="any" required value="${goal.moderate}"></div><div class="field"><label for="goal-cardio-high">High / vigorous-intensity minutes per week</label><input id="goal-cardio-high" name="cardio_high" type="number" min="0" max="10080" step="any" required value="${goal.high}"></div></div></div><div class="cardio-goal-notes"><p class="muscle-note">1 high-intensity minute = 2 moderate minutes. Both inputs add to one flexible goal: 30 high + 60 moderate sets a 120 moderate-equivalent minute target. Either intensity can replace the other. Set both to 0 to leave the goal off.</p><p class="muscle-note"><a href="https://www.cdc.gov/physical-activity-basics/adding-adults/what-counts.html" target="_blank" rel="noopener noreferrer">Adult guideline reference</a>: 150 moderate or 75 vigorous minutes per week, or an equivalent mix. Your target stays your choice.</p></div></div><div class="goal-current"><span>Saved target · ${n(p.target)} moderate-equivalent min/week</span><strong>${n(p.value)} <small>/ ${n(p.target)} min</small></strong><p>${goalRange(p)} · logged so far</p></div></section>`;
+}
 function goals() {
   supplementGoalDraft = JSON.parse(
     JSON.stringify(state.profile.supplement_goals || {}),
   );
   const g = state.profile.goals;
   const cards = [
-    ["workout", "Gym days", "workouts", "days"],
+    ["workout", "Strength training", "workouts", "days"],
     ["protein", "Protein", "nutrition", "g"],
     ["creatine", "Creatine", "drop", "g"],
   ];
@@ -1752,7 +1797,7 @@ function goals() {
       })
       .join(
         "",
-      )}<section class="card goal-card"><div class="card-head"><span class="row-icon">${icon("sleep")}</span><h2>Sleep</h2></div><div class="field"><label for="goal-sleep-hours">Total sleep · hours per day</label><input id="goal-sleep-hours" name="sleep_goal" type="number" min="0.1" max="24" step="0.1" required value="${state.profile.sleep_goal}"></div><div class="field"><label for="goal-night-total">Night sleep · hours per rest day</label><input id="goal-night-total" name="night_hours_goal" type="number" min="0.1" max="24" step="0.1" required value="${state.profile.night_hours_goal}"></div><div class="field"><label for="goal-night-hours">Uninterrupted stretch · personal goal hours</label><input id="goal-night-hours" name="night_sleep_goal" type="number" min="0.1" max="24" step="0.1" required value="${state.profile.night_sleep_goal}"></div><p class="muscle-note">Total rest includes naps. The night target includes sleep before and after brief wake-ups. The uninterrupted-stretch goal is separate and does not affect consistency.</p></section></div><section class="card section-space"><div class="card-head"><div><h2>Supplements you take</h2><p>Select from the starting options or add your own. Every selected supplement has a goal.</p></div></div><div class="routine-choices" id="goal-supplement-choices">${state.profile.supplements
+      )}<section class="card goal-card sleep-goal-card"><div class="card-head"><span class="row-icon">${icon("sleep")}</span><h2>Sleep</h2></div><div class="field"><label for="goal-sleep-hours">Total sleep · hours per day</label><input id="goal-sleep-hours" name="sleep_goal" type="number" min="0.1" max="24" step="0.1" required value="${state.profile.sleep_goal}"></div><div class="field"><label for="goal-night-total">Night sleep · hours per rest day</label><input id="goal-night-total" name="night_hours_goal" type="number" min="0.1" max="24" step="0.1" required value="${state.profile.night_hours_goal}"></div><div class="field"><label for="goal-night-hours">Uninterrupted stretch · personal goal hours</label><input id="goal-night-hours" name="night_sleep_goal" type="number" min="0.1" max="24" step="0.1" required value="${state.profile.night_sleep_goal}"></div><details class="sleep-goal-explanation"><summary>About these sleep targets</summary><p class="muscle-note">Total rest includes naps. The night target includes sleep before and after brief wake-ups. The uninterrupted-stretch goal is separate and does not affect consistency.</p></details></section>${cardioGoalCard()}</div><section class="card section-space"><div class="card-head"><div><h2>Supplements you take</h2><p>Select from the starting options or add your own. Every selected supplement has a goal.</p></div></div><div class="routine-choices" id="goal-supplement-choices">${state.profile.supplements
       .filter((name) => name.toLowerCase() !== "creatine")
       .map((name) =>
         supplementGoalChoice(
@@ -1902,9 +1947,22 @@ function simpleForm(kind, entry = {}, draft = null) {
         "number",
         'required min="0" max="500" step="0.1"',
       ) +
+      field(
+        "Calories · kcal",
+        "calories",
+        entry.calories ?? "",
+        "number",
+        `${entry.id && entry.calories == null ? "" : "required"} min="0" max="10000" step="any"`,
+      ) +
+      (entry.id && entry.calories == null ? '<p class="small muted">Calories were not recorded for this older meal. Add an estimate when available; leaving it blank keeps it unknown.</p>' : "") +
       (entry.low !== undefined
         ? `<div class="form-grid">${field("Estimate range · low g", "low", entry.low, "number", 'min="0" max="500" step="0.1"')}${field("Estimate range · high g", "high", entry.high, "number", 'min="0" max="500" step="0.1"')}</div>`
         : "");
+  if (kind === "cardio") {
+    body += `<div class="field"><label for="entry-activity">Sport or aerobic activity</label><select id="entry-activity" name="activity" required><option value="">Choose an activity</option>${Object.entries(state.cardio_activities || {}).map(([group, names]) => `<optgroup label="${esc(group)}">${names.map(name => `<option value="${esc(name)}" ${entry.activity === name ? "selected" : ""}>${esc(name)}</option>`).join("")}</optgroup>`).join("")}</select></div>` +
+      field("Time engaged · minutes", "minutes", entry.minutes ?? "", "number", 'required min="0.1" max="1440" step="any"') +
+      `<div class="field"><label for="entry-intensity">Overall intensity felt</label><select id="entry-intensity" name="intensity" required><option value="">Choose your intensity</option><option value="moderate" ${entry.intensity === "moderate" ? "selected" : ""}>Moderate</option><option value="high" ${entry.intensity === "high" ? "selected" : ""}>High / vigorous</option></select></div><p class="muscle-note">Choose how the session felt overall. Intensity is not assigned automatically from the activity.</p>`;
+  }
   if (kind === "supplement") {
     const options = [
       ...new Set([
@@ -1957,6 +2015,8 @@ function simpleForm(kind, entry = {}, draft = null) {
               : "supplement entry")
       : kind === "meal"
         ? "Log your food"
+        : kind === "cardio"
+          ? "Log cardio"
         : kind === "body"
           ? "Body weight check-in"
           : kind === "creatine"
@@ -2025,7 +2085,7 @@ function syncWorkout() {
     }
 }
 function usualPicker() {
-  const usual = WorkoutHistory.usualExercises(state.entries, state.today).slice(
+  const usual = WorkoutHistory.usualExercises(state.entries, state.today).filter(item => workoutForm.kind !== "home_workout" || byId[item.id]?.category !== "cardio").slice(
     0,
     12,
   );
@@ -2045,7 +2105,7 @@ function usualPicker() {
 }
 function workoutOptions() {
   const f = workoutForm;
-  return `<details class="workout-options" id="workout-options"><summary aria-label="Workout options" title="Workout options"><span aria-hidden="true">⋯</span></summary><div class="workout-options-panel"><div data-workout-options-list><div class="eyebrow">WORKOUT OPTIONS</div>${f.kind === "workout" && WorkoutHistory.latestWorkout(state.entries, f.date, f.id) ? '<button type="button" data-action="request-previous-workout">Use previous workout…</button>' : ""}<button type="button" class="workout-clear-option" data-action="request-blank-workout">Start blank…</button></div><div data-workout-options-confirm hidden role="group" aria-label="Confirm workout changes"><h3 id="workout-confirm-title"></h3><p id="workout-confirm-description"></p><div class="actions"><button type="button" class="btn secondary" data-action="cancel-workout-replace">Keep editing</button><button type="button" class="btn danger" id="workout-confirm-button"></button></div></div></div></details>`;
+  return `<details class="workout-options" id="workout-options"><summary aria-label="Workout options" title="Workout options"><span aria-hidden="true">⋯</span></summary><div class="workout-options-panel"><div data-workout-options-list><div class="eyebrow">WORKOUT OPTIONS</div>${["workout", "home_workout"].includes(f.kind) && WorkoutHistory.latestWorkout(state.entries, f.date, f.id, f.kind) ? '<button type="button" data-action="request-previous-workout">Use previous workout…</button>' : ""}<button type="button" class="workout-clear-option" data-action="request-blank-workout">Start blank…</button></div><div data-workout-options-confirm hidden role="group" aria-label="Confirm workout changes"><h3 id="workout-confirm-title"></h3><p id="workout-confirm-description"></p><div class="actions"><button type="button" class="btn secondary" data-action="cancel-workout-replace">Keep editing</button><button type="button" class="btn danger" id="workout-confirm-button"></button></div></div></div></details>`;
 }
 function resetWorkoutOptions() {
   const options = $("#workout-options");
@@ -2111,9 +2171,10 @@ function drawWorkout(preservePosition = true) {
     })
     .join("");
   modal(
-    sessionTitle(f.date),
+    f.kind === "home_workout" ? `${sessionTitle(f.date)} · Home workout` : sessionTitle(f.date),
     f.kind === "plan"
       ? "Plans stay separate from completed workouts. All sets are editable."
+      : f.kind === "home_workout" ? "Home strength training · contributes to body training and strength records, without counting as a gym day. Log cardio separately."
       : f.id
         ? "Edit this day’s workout. Save changes updates this day instead of adding another entry."
         : "Start with an empty workout. Add a recent exercise or search for something new.",
@@ -2130,6 +2191,7 @@ function pickerResults(query, matches = null) {
     return '<p class="small muted">Search the full library to add something new.</p>';
   return (
     (matches || exerciseMatches(query))
+      .filter(ex => workoutForm.kind !== "home_workout" || ex.category !== "cardio")
       .slice(0, 12)
       .map((ex) => {
         const selected = workoutForm.exercises.some(
@@ -2435,7 +2497,7 @@ async function action(name, el) {
     case "exercise-history": {
       const entries = state.entries.filter(
         (e) =>
-          e.kind === "workout" &&
+          ["workout", "home_workout"].includes(e.kind) &&
           e.exercises.some((item) => item.exercise_id === id),
       );
       modal(
@@ -2509,6 +2571,9 @@ async function action(name, el) {
     case "close-modal":
       await closeModal();
       break;
+    case "new-home-workout":
+      openWorkout("home_workout");
+      break;
     case "new-workout":
       openWorkout();
       break;
@@ -2517,6 +2582,9 @@ async function action(name, el) {
       break;
     case "new-sleep":
       simpleForm("sleep");
+      break;
+    case "new-cardio":
+      simpleForm("cardio");
       break;
     case "new-meal":
       simpleForm("meal");
@@ -2554,7 +2622,7 @@ async function action(name, el) {
         break;
       }
       const e = state.entries.find((e) => e.id === id);
-      if (["workout", "plan"].includes(e.kind)) openWorkout(e.kind, e);
+      if (["workout", "home_workout", "plan"].includes(e.kind)) openWorkout(e.kind, e);
       else simpleForm(e.kind, e);
       break;
     }
@@ -2626,6 +2694,7 @@ async function action(name, el) {
         state.entries,
         workoutForm.date,
         workoutForm.id,
+        workoutForm.kind,
       );
       if (previous) {
         workoutForm.exercises = previous.exercises.map((item) =>
@@ -2854,7 +2923,7 @@ async function action(name, el) {
       await closeModal();
       prepareCoachMessage(
         name === "ask-food"
-          ? "Help me estimate the protein in my meal. I ate "
+          ? "Help me estimate the protein and calories in my meal. I ate "
           : name === "ask-plan"
             ? `Plan an exercise-only session for ${journalDate}, based on my goals and recent sessions. My focus: `
             : "Assess my progress",
@@ -3146,7 +3215,7 @@ document.addEventListener("change", (event) => {
     render();
   }
   if (el.id === "intake-metric") {
-    intakeMetric = el.value === "creatine" ? "creatine" : "protein";
+    intakeMetric = ["creatine", "calories"].includes(el.value) ? el.value : "protein";
     $("#intake-panel").innerHTML = intakePanel();
     $("#intake-metric").focus({ preventScroll: true });
   }
@@ -3210,7 +3279,7 @@ document.addEventListener("submit", async (event) => {
       toast(
         workoutForm.kind === "plan"
           ? "Workout plan saved"
-          : "Workout logged. A little stronger.",
+          : workoutForm.kind === "home_workout" ? "Home workout logged · gym days unchanged" : "Workout logged. A little stronger.",
       );
     } else if (form.id === "goals-form") {
       const fields = new FormData(form);
@@ -3227,6 +3296,7 @@ document.addEventListener("submit", async (event) => {
       syncSupplementGoals();
       await api("profile", {
         goals,
+        cardio_goal: { moderate: fields.get("cardio_moderate"), high: fields.get("cardio_high") },
         sleep_goal: fields.get("sleep_goal"),
         night_hours_goal: fields.get("night_hours_goal"),
         night_sleep_goal: fields.get("night_sleep_goal"),

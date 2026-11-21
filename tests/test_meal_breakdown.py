@@ -14,13 +14,20 @@ def meal():
         "date": "2026-02-01",
         "description": "Food A, Food B and topping",
         "protein": 15,
+        "calories": 300,
         "low": 13,
         "high": 17,
         "notes": "Synthetic portion assumptions.",
         "items": [
-            {"name": "Food A", "portion": "100 g cooked", "protein": 4},
-            {"name": "Food B", "portion": "1 piece", "protein": 5},
-            {"name": "Topping", "portion": "20 g", "protein": 6, "notes": "Assumed type."},
+            {"name": "Food A", "portion": "100 g cooked", "protein": 4, "calories": 100},
+            {"name": "Food B", "portion": "1 piece", "protein": 5, "calories": 120},
+            {
+                "name": "Topping",
+                "portion": "20 g",
+                "protein": 6,
+                "calories": 80,
+                "notes": "Assumed type.",
+            },
         ],
     }
 
@@ -47,7 +54,7 @@ class MealBreakdownTests(unittest.TestCase):
                 ) as request:
                     result = coach.chat("Log my meal for 2026-02-01", True, "2026-02-01")
                 self.assertIn(
-                    "items:[{name,portion,protein,notes}]", str(request.call_args.args[0])
+                    "items:[{name,portion,protein,calories,notes}]", str(request.call_args.args[0])
                 )
                 for food in meal()["items"]:
                     self.assertIn(

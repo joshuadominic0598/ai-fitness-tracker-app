@@ -197,7 +197,12 @@ class AILoggingTests(unittest.TestCase):
                     {
                         "kind": "meal",
                         "calculation": "6+6",
-                        "data": {"date": DAY, "description": "Eggs", "protein": 12},
+                        "data": {
+                            "date": DAY,
+                            "description": "Eggs",
+                            "protein": 12,
+                            "calories": 150,
+                        },
                     },
                 ]
             },

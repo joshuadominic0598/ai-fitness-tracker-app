@@ -46,4 +46,6 @@ jobs:
       - run: node tests/test_habit_details.cjs
       - run: node tests/test_intake_chart.cjs
       - run: node tests/test_week_review.cjs
+      - run: node tests/test_cardio_calories.cjs
+      - run: node tests/test_home_workouts.cjs
       - run: node tests/test_personal_records.cjs

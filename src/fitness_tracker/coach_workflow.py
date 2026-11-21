@@ -147,7 +147,7 @@ def merge_revision(original, kind, proposal, message):
     if not isinstance(proposal, dict):
         return proposal
     old = deepcopy(original["data"])
-    if original["kind"] in ("workout", "plan") and kind == original["kind"]:
+    if original["kind"] in ("workout", "home_workout", "plan") and kind == original["kind"]:
         changed = {ex["exercise_id"]: ex for ex in proposal.get("exercises", [])}
         # Deletions require an explicit instruction and a named existing exercise.
         from .store import EXERCISES
@@ -170,6 +170,8 @@ def merge_revision(original, kind, proposal, message):
             "items": items,
             "protein": round(sum(float(item["protein"]) for item in items), 2),
         }
+        if all(item.get("calories") is not None for item in items):
+            result["calories"] = round(sum(float(item["calories"]) for item in items), 2)
         if (
             not float(result.get("low", result["protein"]))
             <= result["protein"]
@@ -194,7 +196,9 @@ def merge_revision(original, kind, proposal, message):
             return kind, (
                 ""
                 if kind == "creatine"
-                else entry["data"].get("name", entry["data"].get("period", ""))
+                else entry["data"].get(
+                    "activity", entry["data"].get("name", entry["data"].get("period", ""))
+                )
             )
 
         changed = {identity(entry): entry for entry in updates}
@@ -206,7 +210,7 @@ def merge_revision(original, kind, proposal, message):
                 count_old = sum(old_entry["kind"] == entry["kind"] for old_entry in old["entries"])
                 if count_old == 1 and len(same_kind) == 1:
                     update = changed.pop(same_kind[0])
-            if update and entry["kind"] in ("workout", "plan"):
+            if update and entry["kind"] in ("workout", "home_workout", "plan"):
                 update["data"] = merge_revision(entry, update["kind"], update["data"], message)
             chosen = update or entry
             if chosen["kind"] == "meal" and not chosen.get("calculation"):
@@ -343,11 +347,14 @@ def scope_statistics(entries):
 
     protein, sleep, supplements = defaultdict(float), defaultdict(float), defaultdict(float)
     workouts, sets, creatine = set(), 0, 0
+    home_days, gym_days = set(), set()
+    calories, missing_calories, cardio_moderate, cardio_high = 0, 0, 0, 0
     performance = defaultdict(list)
     for entry in entries:
         kind = entry["kind"]
-        if kind == "workout":
+        if kind in ("workout", "home_workout"):
             workouts.add(entry["date"])
+            (home_days if kind == "home_workout" else gym_days).add(entry["date"])
             sets += sum(len(ex["sets"]) for ex in entry["exercises"])
             for exercise in entry["exercises"]:
                 best = max(
@@ -357,6 +364,13 @@ def scope_statistics(entries):
                 performance[exercise["exercise_id"]].append({"date": entry["date"], **best})
         elif kind == "meal":
             protein[entry["date"]] += entry["protein"]
+            calories += entry.get("calories") or 0
+            missing_calories += entry.get("calories") is None
+        elif kind == "cardio":
+            if entry["intensity"] == "moderate":
+                cardio_moderate += entry["minutes"]
+            else:
+                cardio_high += entry["minutes"]
         elif kind == "sleep":
             sleep[entry["date"]] += entry["hours"]
         elif kind == "creatine":
@@ -375,8 +389,15 @@ def scope_statistics(entries):
         ],
         "matched_records": len(entries),
         "workout_days": len(workouts),
+        "gym_days": len(gym_days),
+        "home_workout_days": len(home_days),
         "workout_sets": sets,
         "protein_g": round(sum(protein.values()), 2),
+        "calories_kcal": round(calories, 2),
+        "meals_missing_calories": missing_calories,
+        "cardio_moderate_minutes": cardio_moderate,
+        "cardio_high_minutes": cardio_high,
+        "cardio_equivalent_minutes": cardio_moderate + 2 * cardio_high,
         "protein_logged_days": len(protein),
         "protein_g_per_logged_day": round(sum(protein.values()) / len(protein), 2)
         if protein
@@ -441,9 +462,9 @@ def format_assessment(context, next_steps):
     if scope.get("end") and scope["end"] != scope.get("start"):
         dates += " to " + scope["end"]
     sections = ["**Progress assessment · " + dates + "**"]
-    if selected("workout"):
+    if selected("workout") or selected("home_workout"):
         sections.append(
-            f"**Workouts**\n1. **Training:** {counted(stats['workout_days'], 'logged workout day')}, {counted(stats['workout_sets'], 'set')}. {suggestion('workouts')}"
+            f"**Workouts**\n1. **Training:** {counted(stats['workout_days'], 'logged workout day')}, {counted(stats['workout_sets'], 'set')}. Gym: {stats.get('gym_days', stats['workout_days'])} day(s); home: {stats.get('home_workout_days', 0)} day(s). {suggestion('workouts')}"
         )
     intake = []
     if selected("meal"):
@@ -469,7 +490,7 @@ def format_assessment(context, next_steps):
         if stats["sleep_hours_per_logged_day"] is not None:
             fact += f" Average: {stats['sleep_hours_per_logged_day']:g} h per logged day."
         intake.append("**Sleep:** " + fact + " " + suggestion("sleep"))
-    if selected("workout"):
+    if selected("workout") or selected("home_workout"):
         from .store import EXERCISES
 
         comparisons = stats.get("exercise_comparisons", [])

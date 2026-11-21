@@ -75,6 +75,32 @@
     goal.period === 1
       ? `per ${goal.unit}`
       : `every ${goal.period} ${goal.unit}s`;
+  function cardioProgress(entries, goal, reference, today, highWeight = 2) {
+    const window = windowFor({ period: 1, unit: "week" }, reference);
+    const totals = { moderate: 0, high: 0 };
+    for (const e of entries) {
+      if (e.kind === "cardio" && e.date >= window.start && e.date <= window.end && e.date <= today)
+        totals[e.intensity] += e.minutes;
+    }
+    const value = totals.moderate + totals.high * highWeight;
+    const target = (goal?.moderate || 0) + (goal?.high || 0) * highWeight;
+    return { ...window, ...totals, minutes: totals.moderate + totals.high, value, target,
+      percent: target > 0 ? value / target * 100 : null, remaining: Math.max(0, target - value) };
+  }
+  function calorieMetrics(entries, reference, today) {
+    const meals = entries.filter(e => e.kind === "meal" && e.date <= today);
+    const summarize = (window) => {
+      const rows = meals.filter(e => e.date >= window.start && e.date <= window.end);
+      return { ...window, value: rows.reduce((sum, e) => sum + (e.calories ?? 0), 0),
+        meals: rows.length, missing: rows.filter(e => e.calories == null).length };
+    };
+    const week = windowFor({ period: 1, unit: "week" }, reference);
+    const history = summarize({ start: week.start, end: week.end < today ? week.end : shift(today, -1) });
+    history.days = Math.max(0, Math.round((date(history.end) - date(history.start)) / 86400000) + 1);
+    history.average = history.days && !history.missing ? history.value / history.days : null;
+    return { day: summarize({ start: reference, end: reference }), week: summarize(week),
+      month: summarize(windowFor({ period: 1, unit: "month" }, reference)), history };
+  }
   function intakeMetrics(entries, key, goal, reference, today, options = {}) {
     const amounts = {},
       logged = new Set();
@@ -174,6 +200,7 @@
         end,
         days,
         total,
+        average: days ? total / days : null,
         loggedDays,
         met,
         percent: days ? percent(total, expected) : null,
@@ -270,6 +297,8 @@
     progress,
     periodLabel,
     intakeMetrics,
+    cardioProgress,
+    calorieMetrics,
     supplementProgress,
     canonicalUnit,
   };

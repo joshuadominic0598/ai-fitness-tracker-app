@@ -141,7 +141,12 @@ class AgentGraphTests(unittest.TestCase):
         reply = {
             "action": "meal",
             "message": "Estimate",
-            "proposal": {"date": "2026-11-09", "description": "Eggs and bread", "protein": 20},
+            "proposal": {
+                "date": "2026-11-09",
+                "description": "Eggs and bread",
+                "protein": 20,
+                "calories": 350,
+            },
         }
 
         def calc(expression):

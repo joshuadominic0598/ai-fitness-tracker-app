@@ -121,7 +121,7 @@ const assert = require("node:assert/strict"),
   assert.match(review.verificationFooter("workout"), /Prepared: 18 g protein/);
   assert.ok(
     source.indexOf("d.workouts.map(dayWorkout)") <
-      source.indexOf('verificationFooter("workout")}</div>'),
+      source.indexOf('verificationFooter("workout")}${homeWorkoutJournal'),
     "verification follows the workout entries",
   );
   console.log(

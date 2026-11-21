@@ -85,9 +85,13 @@ def scope_for(message, selected, previous=None):
         scope.update(start=start.isoformat(), end=end.isoformat())
     kinds = set()
     for pattern, categories in (
-        (r"workouts?|training|strength|exercises?", ["workout"]),
+        (r"workouts?|training|strength|exercises?", ["workout", "home_workout"]),
         (r"intake", ["meal", "creatine", "supplement", "sleep"]),
-        (r"protein|food|meals?|nutrition", ["meal"]),
+        (r"protein|calories|kcal|food|meals?|nutrition", ["meal"]),
+        (
+            r"cardio|badminton|swim(?:ming)?|pickleball|cycl(?:ing|ed)?|running|jogging|aerobic",
+            ["cardio"],
+        ),
         (r"creatine", ["creatine"]),
         (r"supplements?|vitamins?", ["supplement"]),
         (r"sleep|nap", ["sleep"]),
@@ -96,6 +100,14 @@ def scope_for(message, selected, previous=None):
             kinds.update(categories)
     if kinds:
         scope["kinds"] = sorted(kinds)
+        if (
+            "home_workout" in kinds
+            and re.search(r"\bhome\b", message, re.I)
+            and not re.search(r"\bgym\b", message, re.I)
+        ):
+            scope["kinds"] = [kind for kind in scope["kinds"] if kind != "workout"]
+        elif re.search(r"\bgym\b", message, re.I) and not re.search(r"\bhome\b", message, re.I):
+            scope["kinds"] = [kind for kind in scope["kinds"] if kind != "home_workout"]
     if re.search(r"\b(everything|all categories|both|general|overall progress)\b", message, re.I):
         scope.pop("kinds", None)
     return scope
@@ -266,7 +278,8 @@ class SemanticIndex:
             allowed = {
                 ex["exercise_id"]
                 for entry in self.store.entries()
-                if entry["kind"] == "workout" and entry["date"] <= date.today().isoformat()
+                if entry["kind"] in ("workout", "home_workout")
+                and entry["date"] <= date.today().isoformat()
                 for ex in entry["exercises"]
             }
         evidence = {

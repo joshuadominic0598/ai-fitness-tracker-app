@@ -194,6 +194,7 @@ assert.equal(historical.history.start, "2026-11-09");
 assert.equal(historical.history.end, "2026-11-15");
 assert.equal(historical.history.days, 7);
 assert.equal(historical.history.attainment, 90);
+assert.equal(historical.history.average, 90);
 const current = G.intakeMetrics(
   records,
   "protein",
@@ -204,6 +205,30 @@ const current = G.intakeMetrics(
 );
 assert.equal(current.week.value, 0);
 assert.equal(current.history.days, 0);
+assert.equal(current.history.average, null);
+const partialWeekEntries = [
+  { kind: "meal", date: "2026-11-09", protein: 140 },
+  { kind: "meal", date: "2026-11-09", protein: 70 },
+  { kind: "meal", date: "2026-11-11", protein: 80 }, // Today.
+  { kind: "meal", date: "2026-11-12", protein: 900 }, // Future.
+  { kind: "creatine", date: "2026-11-09", amount: 3, unit: "g" },
+  log("2026-11-09", 2, "Creatine", "g"), // Legacy gram entry.
+  log("2026-11-09", 10, "Creatine", "capsule"),
+  log("2026-11-11", 5, "Creatine", "g"),
+];
+for (const [key, average] of [["protein", 105], ["creatine", 2.5]]) {
+  const metrics = G.intakeMetrics(
+    partialWeekEntries, key, { ...profile.goals[key], amount: 0 },
+    "2026-11-10", "2026-11-11", { historyPeriod: "week" },
+  );
+  assert.equal(metrics.history.days, 2);
+  assert.equal(metrics.history.average, average,
+    "average includes missing days, excludes today/future, and works without a target");
+  assert.equal(G.intakeMetrics(
+    [], key, profile.goals[key], "2026-11-10", "2026-11-11",
+    { historyPeriod: "week" },
+  ).history.average, 0, "completed days without logs average zero");
+}
 const dedicatedCreatine = {
   kind: "creatine",
   date: "2026-11-09",
@@ -307,8 +332,11 @@ assert.match(html, /review-week-prev/);
 assert.match(html, /value="2026-11-12"/);
 assert.match(html, /630 \/ 700 g/);
 assert.match(html, /7<small> completed days/);
+assert.match(html, /Average daily intake<\/span><strong>90 g\/day/);
+assert.match(html, /Average daily intake<\/span><strong>0\.7 g\/day/);
 ctx.reviewDate = "2026-11-16";
 assert.match(ctx.nutritionMetrics(), /0 \/ 700 g/);
+assert.equal((ctx.nutritionMetrics().match(/Average daily intake<\/span><strong>—/g) || []).length, 3);
 assert.match(ctx.weeklyGoalsPanel(), /2026-11-16 – 2026-11-22/);
 console.log(
   "Week review passed: historical navigation, full-week targets, overview categories, cumulative supplements, 90% green rows and zero-filled future days.",

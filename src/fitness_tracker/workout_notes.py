@@ -9,6 +9,7 @@ from collections import Counter
 
 GROUPS = [
     ("pushups", r"\bpush[ -]?ups?\b", ["Pushups"]),
+    ("situps", r"\bsit[ -]?ups?\b", ["Sit-Up"]),
     (
         "single-arm cable triceps extension",
         r"\btriceps?\s+(?:single|one)[ -]?arm\s+cable\s+(?:pull|push)\s*down\b",
@@ -107,10 +108,17 @@ GROUPS = [
 def clean_diary(value):
     value = value.replace("\\.", ".").replace("&#x20;", " ")
     value = re.sub(
-        r"^\s*(?:log|record|prepare)(?: my)?(?: completed)? workout(?: for [^:\n]+)?\s*:\s*",
+        r"^\s*(?:log|record|prepare)(?: my)?(?: completed)? (?:(?:home|gym) )?workout(?: for [^:\n]+)?\s*:\s*",
         "",
         value,
         flags=re.I | re.M,
+    )
+    value = re.sub(r"^\s*(?:home|gym)\s+workout\s*:\s*", "", value, flags=re.I | re.M)
+    value = re.sub(
+        r"(?:,\s*|\s+(?:and|then)\s+)(?=\d+\s+(?:push[ -]?ups?|sit[ -]?ups?)\b)",
+        "\n",
+        value,
+        flags=re.I,
     )
     value = re.sub(
         r"^\s*Help me (?:log/plan|log or plan) my workout[.! ]*(?:\\)?\s*$",
@@ -130,7 +138,7 @@ def combine_source(previous, message):
 
     message = clean(message)
     blocks = list(dict.fromkeys(clean(b) for b in previous.split("\nClarifications:\n")))
-    if requested_log_kind(message) == "workout" or message in blocks:
+    if requested_log_kind(message) in ("workout", "home_workout") or message in blocks:
         return message
     missing = [
         item
@@ -370,13 +378,18 @@ def inventory(value, retriever=None):
                     groups[current]["sets"].append(
                         {"weight": float(load[1]), "reps": int(count), "source": line}
                     )
-        elif groups[current]["candidates"][0] == "Pushups":
+        elif groups[current]["candidates"][0] in ("Pushups", "Sit-Up"):
             counts = re.findall(r"(\d+)\s*reps?\b", quantity_line, re.I)
             if not counts:
                 count = re.search(
-                    r"(\d+)\s*push[ -]?ups?\b|push[ -]?ups?\s*(\d+)", quantity_line, re.I
+                    r"(\d+)\s*(?:push|sit)[ -]?ups?\b|(?:push|sit)[ -]?ups?\s*(\d+)",
+                    quantity_line,
+                    re.I,
                 )
                 counts = [next(g for g in count.groups() if g)] if count else []
+            stated_sets = re.search(r"(\d+)\s*sets?\b", quantity_line, re.I)
+            if stated_sets and len(counts) == 1:
+                counts *= int(stated_sets[1])
             groups[current]["sets"].extend(
                 {"weight": 0, "reps": int(n), "source": line} for n in counts
             )

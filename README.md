@@ -16,9 +16,17 @@ Changing a set keeps you at the place you're editing. Your journal should help y
 
 ## See your consistency grow
 
-Your calendar brings the daily picture together. Switch between exercise, protein, creatine, supplements and sleep, then look across the weeks. Personal goals give the numbers context, and the six consistency scores help you spot the habits you want to work on next.
+Your calendar brings the daily picture together. Switch between strength training, cardio, protein, creatine, supplements and sleep, then look across the weeks. Personal goals give the numbers context, and the six consistency scores help you spot the habits you want to work on next.
 
 ![Activity calendar and six consistency scores](docs/images/consistency-calendar.png)
+
+## Keep home workouts in the picture
+
+Log push-ups, sit-ups, dumbbell exercises and other strength work in **Track → Home workouts**. Record sets, reps, added weight or timed holds, and keep several short sessions on the same day. Home sessions contribute to the muscle map, training volume, exercise history and strength records without adding gym days. Cardio stays in its own tracker.
+
+## Log cardio your way
+
+Keep strength training and cardio separate. Choose from more than 40 sports, games and aerobic activities, including badminton, swimming, pickleball, cycling and running. Log minutes and overall felt intensity, then follow your weekly cardio goal. One high-intensity minute counts as two moderate minutes; either intensity or a mix can meet your target. Meals track both protein grams and calories in kcal, with AI estimates reviewed before saving.
 
 ## Discover where your training goes
 
@@ -34,13 +42,13 @@ Browse a library of photographed exercises with instructions and tutorial links.
 
 ## Find the patterns behind your progress
 
-Follow your strength over time and see which movements you return to. Protein and creatine use line charts with **Daily** and **Weekly** views, showing up to the **latest 20 recorded points**. Exact values remain available beneath each chart.
+Follow your strength over time and see which movements you return to. Protein, calories and creatine use line charts with **Daily** and **Weekly** views, showing up to the **latest 20 recorded points**. Exact values remain available beneath each chart.
 
 ![Strength, training balance, and daily or weekly intake trends](docs/images/progress-and-intake-trends.png)
 
 ## A coach you can talk to, on your computer
 
-Type your workout or meal, or use the microphone beside **Send** to record your voice. Local speech recognition turns audio into editable text in the message box. Check it, make any corrections, then press **Send**. The local **Qwen** coach can suggest exercise matches, estimate protein, help plan a session, and explain your progress. It streams progress stages while preparing its answer, preserves pending previews during corrections, and asks about uncertain exercise matches. Exercise and journal retrieval use a local SQLite vector index with **EmbeddingGemma**; approved records are indexed as they change.
+Type your workout or meal, or use the microphone beside **Send** to record your voice. Local speech recognition turns audio into editable text in the message box. Check it, make any corrections, then press **Send**. The local **Qwen** coach can suggest exercise matches, estimate protein and calories, help plan a session, and explain your progress. It streams progress stages while preparing its answer, preserves pending previews during corrections, and asks about uncertain exercise matches. Exercise and journal retrieval use a local SQLite vector index with **EmbeddingGemma**; approved records are indexed as they change.
 
 Long workout notes are handled in smaller batches. You get a preview to review, correct and approve before anything becomes a saved journal entry. Unclear details stay visible so you can fill them in. A new-chat button gives you a fresh conversation when you need one.
 

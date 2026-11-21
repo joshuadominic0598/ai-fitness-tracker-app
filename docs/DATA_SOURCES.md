@@ -34,6 +34,21 @@ Its bundled photo reuses the public-domain `V-Bar_Pullup` image. The interface e
 
 `src/fitness_tracker/anatomy.py` supplies the app's high-level body parts and detailed movement labels without rewriting the upstream dataset. At the user's request, the five reverse-curl variations use Forearms as their primary tally and retain Biceps as assisting. This is a training-focus classification, not a claim that other muscles are inactive or a measured ranking of activation. [Bowflex's exercise manual](https://download.bowflex.com/supportdocs/OM/Bowflex/BFX_Power_Pro_OM_web.pdf) describes forearm and upper-arm involvement in reverse curls.
 
+A November 20, 2026 audit checked all 34 distinct exercises in the local saved workouts. Every exercise already had a recognized primary group; Chest Fly Machine (`Butterfly`) and Low Cable Crossover both correctly counted toward Chest. The body-map exercise list previously used a small scrolling viewport, which concealed later rows even though their sets were included in the total. The list now expands to show every contributing exercise.
+
+The overlay also fills six missing assisting classifications:
+
+| Exercise | Primary group retained | Assisting groups added |
+| --- | --- | --- |
+| Chest Fly Machine (`Butterfly`) | Chest | Shoulders |
+| Hammer Curls | Biceps | Forearms |
+| Cable Hammer Curls – Rope Attachment | Biceps | Forearms |
+| Standing Biceps Cable Curl | Biceps | Forearms |
+| Seated Dumbbell Curl | Biceps | Forearms |
+| Cable Rear Delt Fly | Shoulders | Back (middle back and traps, counted once) |
+
+These broad assisting labels are app classifications inferred from movement anatomy: [ACE's applied exercise science reference](https://www.acefitness.org/academy/AcademyElitePDFs/ESS-AES_Download_Final.pdf) identifies anterior deltoid assistance in horizontal shoulder adduction and the middle trapezius/rhomboids in scapular retraction; [ACE's biceps review](https://www.acefitness.org/resources/pros/expert-articles/9033/building-better-biceps-evidence-based-exercises-for-strength-and-function/) describes brachioradialis involvement in curls. Machine design affects shoulder involvement, as illustrated by [Technogym's pectoral machine description](https://www.technogym.com/en-INT/product/selection-900-pectoral_MNTP.html). Primary groups and existing secondary groups are preserved. Empty secondary lists are allowed where no additional broad assisting group has been established; the app does not assign arbitrary muscles merely to fill a field. Journal dates, exercises, loads, reps and sets are unaffected.
+
 ## Coaching skills, web search and calculator
 
 Seven versioned guides link to ACSM, WHO, ISSN/IUSCA, NIH and technique/recovery resources. [The skill index](COACH_SKILLS.md) records the sources, review date, scope and inference limits. Every research-mode coach turn attempts a generalized public web query using DDGS/Bing; official and primary sources are prioritized. If metasearch is unavailable, live Europe PMC search is labelled as a fallback. Query terms are restricted to general fitness vocabulary to avoid forwarding private names or numeric journal details. Both search failures and cached guide citations are labelled. The calculator evaluates a restricted numeric AST and cannot run Python code or access files.
@@ -47,3 +62,10 @@ The direct logging prompt includes a rough large-egg protein reference from [USD
 ## Body-map illustration
 
 The front/back anatomy SVG is drawn in this project; it does not embed or copy the supplied reference image. Its group highlights use the existing exercise catalog classifications. The relative shading is a local visualization convention implemented in the app, not measured muscle activation.
+
+
+## Cardio intensity equivalence
+
+Verified November 21, 2026: the [CDC adult activity reference](https://www.cdc.gov/physical-activity-basics/adding-adults/what-counts.html) describes 150 moderate or 75 vigorous minutes weekly, or an equivalent mix, and the rule of thumb that one vigorous minute counts as two moderate minutes. The [WHO physical-activity fact sheet](https://www.who.int/news-room/fact-sheets/detail/physical-activity) supplies the broader guideline context. The app labels vigorous intensity as “High / vigorous” and uses this 2:1 conversion for a user-chosen weekly goal. Actual minutes and goal credit stay separate; this does not estimate calories burned.
+
+Meal calories are estimates from user-described foods, portions and product labels through the local model, rather than a verified food database. Each AI food item has separate protein and kcal estimates and assumptions. The app evaluates arithmetic and checks item totals, but does not verify a model’s underlying food estimate. Unknown calories on older meals are preserved as missing data.
