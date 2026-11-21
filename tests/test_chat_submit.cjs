@@ -282,7 +282,7 @@ const code = source.slice(
       html.indexOf('class="message-resources"'),
     "approval is visible outside collapsed resources",
   );
-  assert.match(html, /Review the list above/);
+  assert.match(html, /not saved yet/);
   assert.match(html, /View in Track/);
   for (const kind of [
     "workout",

@@ -287,11 +287,18 @@ class Store:
                 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS messages
                 (id INTEGER PRIMARY KEY, role TEXT NOT NULL, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS completed_chat_requests
+                (request_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, response_id INTEGER NOT NULL,
+                 user_data TEXT NOT NULL, response_data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS drafts
                 (id TEXT PRIMARY KEY, kind TEXT NOT NULL, data TEXT NOT NULL, status TEXT DEFAULT 'pending');
             """)
         self.path.chmod(0o600)
         with self.connect() as con:
+            for (message_id,) in con.execute(
+                "SELECT id FROM messages WHERE role='user'"
+            ).fetchall():
+                self._cache_chat_exchange(con, message_id)
             if "baseline" not in {row[1] for row in con.execute("PRAGMA table_info(drafts)")}:
                 con.execute("ALTER TABLE drafts ADD COLUMN baseline TEXT DEFAULT '{}'")
         from .semantic_index import initialize, journal_chunk, upsert
@@ -570,7 +577,13 @@ class Store:
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             con.execute("DELETE FROM coach_chunks WHERE category!='exercise'")
-            for table in ("entries", "workout_revisions", "messages", "drafts"):
+            for table in (
+                "entries",
+                "workout_revisions",
+                "messages",
+                "drafts",
+                "completed_chat_requests",
+            ):
                 con.execute(f"DELETE FROM {table}")
             con.execute("DELETE FROM settings WHERE key != 'demo_initialized'")
 
@@ -601,10 +614,44 @@ class Store:
 
     def update_message(self, message_id, data):
         with self.connect() as con:
+            self._cache_chat_exchange(con, message_id)
             con.execute("UPDATE messages SET data=? WHERE id=?", (json.dumps(data), message_id))
+
+    def _cache_chat_exchange(self, con, message_id):
+        """Freeze a completed response before its visible exchange can be edited."""
+        row = con.execute(
+            "SELECT data FROM messages WHERE id=? AND role='user'", (message_id,)
+        ).fetchone()
+        if not row:
+            return
+        user = json.loads(row[0])
+        request_id = user.get("request_id")
+        if not request_id or user.get("status") in ("pending", "failed"):
+            return
+        answer = con.execute(
+            "SELECT id,role,data FROM messages WHERE id>? ORDER BY id LIMIT 1", (message_id,)
+        ).fetchone()
+        if not answer or answer[1] != "assistant":
+            return
+        response = json.loads(answer[2])
+        if response.get("request_id") != request_id:
+            return
+        con.execute(
+            "INSERT OR IGNORE INTO completed_chat_requests VALUES (?,?,?,?,?)",
+            (request_id, message_id, answer[0], row[0], answer[2]),
+        )
 
     def chat_request(self, request_id):
         with self.connect() as con:
+            cached = con.execute(
+                "SELECT user_id,response_id,user_data,response_data FROM completed_chat_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            if cached:
+                return [
+                    dict(json.loads(cached[2]), role="user", id=cached[0]),
+                    dict(json.loads(cached[3]), role="assistant", id=cached[1]),
+                ]
             rows = con.execute(
                 "SELECT id,role,data FROM messages WHERE json_extract(data,'$.request_id')=? ORDER BY id",
                 (request_id,),
@@ -628,6 +675,7 @@ class Store:
         from .semantic_index import upsert
 
         with self.connect() as con:
+            self._cache_chat_exchange(con, message_id)
             # Quoted conversation is recall evidence, never a journal observation or instruction.
             upsert(
                 con,
@@ -641,9 +689,48 @@ class Store:
             )
             user = {**user, "status": "sent"}
             con.execute("UPDATE messages SET data=? WHERE id=?", (json.dumps(user), message_id))
-            con.execute(
-                "INSERT INTO messages(role,data) VALUES ('assistant',?)", (json.dumps(response),)
+            replacement = user.get("replace_response_id")
+            if replacement:
+                con.execute(
+                    "UPDATE messages SET data=? WHERE id=? AND role='assistant'",
+                    (json.dumps(response), replacement),
+                )
+            else:
+                con.execute(
+                    "INSERT INTO messages(role,data) VALUES ('assistant',?)",
+                    (json.dumps(response),),
+                )
+            self._cache_chat_exchange(con, message_id)
+
+    def editable_chat_exchange(self, message_id):
+        """Resolve a current, unresolved logging exchange before replacing its source."""
+        if type(message_id) is not int or message_id < 1:
+            raise ValueError("Choose a logging message to edit.")
+        messages = self.messages()
+        index = next((i for i, m in enumerate(messages) if m["id"] == message_id), None)
+        if index is None or messages[index]["role"] != "user":
+            raise ValueError("That logging message is no longer in this chat.")
+        user = messages[index]
+        if user.get("revise_draft_id"):
+            raise ValueError(
+                "This message is a correction. Suggest changes to its pending preview instead of replacing the full source."
             )
+        answer = messages[index + 1] if index + 1 < len(messages) else None
+        if answer and answer["role"] != "assistant":
+            answer = None
+        draft = next(
+            (d for d in self.drafts() if answer and d["id"] == answer.get("draft", {}).get("id")),
+            None,
+        )
+        if (answer and answer.get("approved")) or not (
+            draft
+            or (user.get("logging_kind") and (not answer or answer.get("action") == "clarify"))
+            or (user.get("status") == "failed" and user.get("edit_message_id"))
+        ):
+            raise ValueError(
+                "Only an unresolved logging message can be edited. Start a new log instead."
+            )
+        return user, answer, draft
 
     def message(self, role, data):
         with self.connect() as con:
