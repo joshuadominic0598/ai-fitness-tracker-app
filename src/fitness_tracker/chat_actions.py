@@ -156,8 +156,8 @@ def require_meal_calories(proposal):
     items = proposal.get("items", [])
     if not isinstance(items, list):
         raise ValueError("Prepare a food item list with protein and calories.")
-    if proposal.get("calories") is None or any(
-        not isinstance(item, dict) or item.get("calories") is None for item in items
+    if proposal.get("calories") in (None, "") or any(
+        not isinstance(item, dict) or item.get("calories") in (None, "") for item in items
     ):
         raise ValueError(
             "Estimate calories in kcal for the meal and every food item before preparing the preview."
