@@ -1322,8 +1322,9 @@ function syncChatThread(forceScroll = false) {
   }
   const form = $("#chat-form");
   const unresolved = [...(state.messages || [])].reverse()
-    .filter(m => m.role === "assistant").map(m => chatEditableExchange(null, m)).find(Boolean);
-  if (form) form.hidden = Boolean(chatEdit || unresolved);
+    .filter(m => m.role === "assistant").map(m => chatEditableExchange(null, m))
+    .find(exchange => exchange && (exchange.draft || exchange.answer === state.messages[state.messages.length - 1]));
+  if (form) form.hidden = Boolean(chatEdit);
   const hint = $("#chat-review-hint");
   if (hint) {
     hint.hidden = Boolean(chatEdit) || !unresolved || chatIsBusy();
