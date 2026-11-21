@@ -25,7 +25,13 @@ from .chat_actions import (
     require_meal_calories,
 )
 from .chat_policy import BASE_CHAT_SYSTEM, TASK_GUIDANCE
-from .coach_workflow import correct_workout_source, is_departure, merge_revision, simple_intake
+from .coach_workflow import (
+    correct_workout_source,
+    is_departure,
+    merge_revision,
+    simple_intake,
+    strength_categories,
+)
 from .semantic_index import SemanticIndex, scope_for
 from .store import CATALOG, insights, number, text, valid_date
 
@@ -617,6 +623,10 @@ class Coach:
             workout_only = (
                 logging_kind in ("workout", "home_workout")
                 and not choose_workout_mode
+                and not (
+                    re.search(r"\b(?:home|in my room)\b", workout_source, re.I)
+                    and re.search(r"\bgym\b", workout_source, re.I)
+                )
                 and not re.search(
                     r"\b(ate|eat|meal|protein|creatine|supplement|slept|sleep|vitamin|collagen)\b",
                     workout_source,
@@ -983,8 +993,6 @@ class Coach:
                     "token_counts": [tokens] if tokens else [],
                 }
             reply = run["reply"]
-            if logging_kind == "home_workout" and reply.get("action") == "workout":
-                reply = {**reply, "action": "home_workout"}
             planning_requested = bool(re.search(r"\bplan(?:ning)?\b", message, re.I))
             if reply["action"] in (
                 "workout",
@@ -1100,6 +1108,10 @@ class Coach:
                 if reply["action"] == "meal" and isinstance(proposal, dict):
                     proposal["source"] = "ai"
                 try:
+                    reply["action"], proposal = strength_categories(
+                        reply["action"], proposal, message, logging_kind, revision
+                    )
+                    response["action"] = reply["action"]
                     if revision and not reply.get("workout_prepared"):
                         proposal = merge_revision(revision, reply["action"], proposal, message)
                         if revision["kind"] == "batch":

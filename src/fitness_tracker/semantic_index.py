@@ -8,6 +8,8 @@ import threading
 import time
 from datetime import date, timedelta
 
+from .cardio import ACTIVITY_PATTERN
+
 EMBED_MODEL = "embeddinggemma:latest"
 
 
@@ -89,14 +91,19 @@ def scope_for(message, selected, previous=None):
         (r"intake", ["meal", "creatine", "supplement", "sleep"]),
         (r"protein|calories|kcal|food|meals?|nutrition", ["meal"]),
         (
-            r"cardio|badminton|swim(?:ming)?|pickleball|cycl(?:ing|ed)?|running|jogging|aerobic",
+            ACTIVITY_PATTERN,
             ["cardio"],
         ),
         (r"creatine", ["creatine"]),
         (r"supplements?|vitamins?", ["supplement"]),
         (r"sleep|nap", ["sleep"]),
     ):
-        if re.search(r"\b(?:" + pattern + r")\b", message, re.I):
+        source = (
+            re.sub(r"\b(?:" + ACTIVITY_PATTERN + r")\b", " ", message, flags=re.I)
+            if "workout" in categories
+            else message
+        )
+        if re.search(r"\b(?:" + pattern + r")\b", source, re.I):
             kinds.update(categories)
     if kinds:
         scope["kinds"] = sorted(kinds)

@@ -3,6 +3,7 @@
 import hashlib
 import json
 import math
+import re
 import sqlite3
 import uuid
 from contextlib import closing, contextmanager, nullcontext
@@ -825,7 +826,7 @@ class Store:
         else:
             items = [{"kind": kind, "data": data}]
         clean = []
-        for item in items:
+        for index, item in enumerate(items):
             if not isinstance(item, dict) or item.get("kind") not in (
                 "meal",
                 "cardio",
@@ -842,7 +843,26 @@ class Store:
             entry_kind = (
                 "creatine" if is_creatine({"kind": item["kind"], **validated}) else item["kind"]
             )
-            clean.append({"kind": entry_kind, "data": validated})
+            entry = {"kind": entry_kind, "data": validated}
+            if kind == "batch":
+                # Deterministic defaults keep legacy pending batches stable on every read.
+                item_id = (
+                    item.get("item_id")
+                    or uuid.uuid5(
+                        uuid.NAMESPACE_OID,
+                        json.dumps([index, entry_kind, validated], sort_keys=True),
+                    ).hex
+                )
+                if not isinstance(item_id, str) or not re.fullmatch(r"[a-f0-9]{32}", item_id):
+                    raise ValueError(
+                        "This correction lost its link to a batch entry. Prepare the preview again."
+                    )
+                entry["item_id"] = item_id
+            clean.append(entry)
+        if kind == "batch" and len({item["item_id"] for item in clean}) != len(clean):
+            raise ValueError(
+                "The same batch session was included twice. Prepare the preview again."
+            )
         if len({item["data"]["date"] for item in clean}) != 1:
             raise ValueError("Prepare one journal day at a time.")
         if sum(item["kind"] == "workout" for item in clean) > 1:

@@ -166,6 +166,94 @@ def removed_food_names(message, items):
     return removed
 
 
+def strength_categories(kind, proposal, message, logging_kind, revision=None):
+    """Ground gym/home categories before either standalone or batch validation."""
+    if not isinstance(proposal, dict):
+        return kind, proposal
+    proposal = deepcopy(proposal)
+    entries = proposal.get("entries", []) if kind == "batch" else [{"kind": kind, "data": proposal}]
+    if not isinstance(entries, list) or any(
+        not isinstance(entry, dict) or not isinstance(entry.get("data"), dict) for entry in entries
+    ):
+        raise ValueError("Prepare a list of valid journal entries before approving the preview.")
+    previous = (
+        revision["data"]["entries"]
+        if revision and revision["kind"] == "batch"
+        else [revision]
+        if revision
+        else []
+    )
+    strength = {"workout", "home_workout"}
+    home = r"\b(?:home|in my room)\b"
+    gym = r"\b(?:(?:at|in|to) (?:the )?gym|gym (?:workout|session|training))\b"
+    has_home, has_gym = bool(re.search(home, message, re.I)), bool(re.search(gym, message, re.I))
+    located = {"home_workout": set(), "workout": set()}
+    if has_home and has_gym:
+        from .exercise_matching import normalize
+        from .store import EXERCISES
+        from .workout_notes import inventory
+
+        proposed_ids = {
+            ex.get("exercise_id")
+            for entry in entries
+            for ex in entry.get("data", {}).get("exercises", [])
+        }
+        for clause in re.split(r"[;\n]|\band\s+(?=(?:at |in |home|gym))", message, flags=re.I):
+            at_home, at_gym = (
+                bool(re.search(home, clause, re.I)),
+                bool(re.search(gym, clause, re.I)),
+            )
+            if at_home != at_gym:
+                located["home_workout" if at_home else "workout"].update(
+                    eid for group in inventory(clause)["groups"] for eid in group["candidates"]
+                )
+                located["home_workout" if at_home else "workout"].update(
+                    eid
+                    for eid in proposed_ids
+                    if eid in EXERCISES
+                    and re.search(
+                        r"\b" + re.escape(normalize(EXERCISES[eid]["name"])) + r"\b",
+                        normalize(clause),
+                    )
+                )
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("kind") not in strength:
+            continue
+        prior = [
+            old for old in previous if old.get("item_id") and old["item_id"] == entry.get("item_id")
+        ]
+        old_strength = [old["kind"] for old in previous if old["kind"] in strength]
+        if prior and prior[0]["kind"] in strength:
+            entry["kind"] = prior[0]["kind"]
+        elif old_strength and len(set(old_strength)) == 1 and not (has_home or has_gym):
+            entry["kind"] = old_strength[0]
+        elif has_home and has_gym:
+            exercise_ids = {
+                ex.get("exercise_id") for ex in entry.get("data", {}).get("exercises", [])
+            }
+            matches = [
+                category
+                for category, ids in located.items()
+                if exercise_ids
+                and exercise_ids <= ids
+                and not any(
+                    exercise_ids & other_ids
+                    for other, other_ids in located.items()
+                    if other != category
+                )
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    "Separate the gym and home exercises into clearly labelled sessions before approving this batch."
+                )
+            entry["kind"] = matches[0]
+        elif has_gym:
+            entry["kind"] = "workout"
+        elif has_home or logging_kind == "home_workout":
+            entry["kind"] = "home_workout"
+    return (kind, proposal) if kind == "batch" else (entries[0]["kind"], proposal)
+
+
 def merge_revision(original, kind, proposal, message):
     """A partial model reply is a patch, never permission to erase untouched items."""
     if not isinstance(proposal, dict):
@@ -235,6 +323,11 @@ def merge_revision(original, kind, proposal, message):
         updates = (
             proposal.get("entries", []) if kind == "batch" else [{"kind": kind, "data": proposal}]
         )
+        if not isinstance(updates, list) or any(
+            not isinstance(entry, dict) or not isinstance(entry.get("data"), dict)
+            for entry in updates
+        ):
+            raise ValueError("Prepare a list of valid corrections to the pending preview.")
 
         def identity(entry):
             from .supplement_goals import is_creatine
@@ -252,15 +345,61 @@ def merge_revision(original, kind, proposal, message):
                 )
             )
 
-        changed = {identity(entry): entry for entry in updates}
+        changed, additions = {}, []
+        for update in updates:
+            item_id = update.get("item_id")
+            if (
+                not item_id
+                and update["kind"] in ("cardio", "home_workout")
+                and re.search(r"\badd\s+(?:another|(?:a\s+)?new|an extra)\b", message, re.I)
+            ):
+                additions.append(update)
+                continue
+            candidates = [
+                index
+                for index, entry in enumerate(old["entries"])
+                if (
+                    entry.get("item_id") == item_id
+                    if item_id
+                    else identity(entry) == identity(update)
+                )
+            ]
+            if item_id and not candidates:
+                raise ValueError("That correction does not match a session in the pending preview.")
+            if not candidates and not item_id:
+                same_kind = [
+                    index
+                    for index, entry in enumerate(old["entries"])
+                    if identity(entry)[0] == identity(update)[0]
+                ]
+                if (
+                    len(same_kind) == 1
+                    and sum(identity(other)[0] == identity(update)[0] for other in updates) == 1
+                ):
+                    candidates = same_kind
+            if len(candidates) > 1:
+                raise ValueError(
+                    "Several sessions match this correction. Specify which session to change, such as the first or second."
+                )
+            if not candidates:
+                if not re.search(r"\badd\b", message, re.I) and any(
+                    identity(entry)[0] == identity(update)[0] for entry in old["entries"]
+                ):
+                    raise ValueError(
+                        "Specify which existing session this correction should change."
+                    )
+                additions.append(update)
+                continue
+            index = candidates[0]
+            if index in changed:
+                raise ValueError("A batch session cannot be corrected twice in the same proposal.")
+            entry = old["entries"][index]
+            if identity(entry)[0] != identity(update)[0]:
+                raise ValueError("Keep each batch session in its original journal category.")
+            changed[index] = update
         entries = []
-        for entry in old["entries"]:
-            update = changed.pop(identity(entry), None)
-            if update is None:
-                same_kind = [key for key in changed if key[0] == entry["kind"]]
-                count_old = sum(old_entry["kind"] == entry["kind"] for old_entry in old["entries"])
-                if count_old == 1 and len(same_kind) == 1:
-                    update = changed.pop(same_kind[0])
+        for index, entry in enumerate(old["entries"]):
+            update = changed.get(index)
             if update and entry["kind"] in ("workout", "home_workout", "plan", "meal"):
                 update["data"] = merge_revision(entry, update["kind"], update["data"], message)
                 if entry["kind"] == "meal":
@@ -268,27 +407,32 @@ def merge_revision(original, kind, proposal, message):
                         str(food["protein"]) for food in update["data"].get("items", [])
                     ) or str(update["data"]["protein"])
             chosen = update or entry
+            if entry.get("item_id"):
+                chosen["item_id"] = entry["item_id"]
             if chosen["kind"] == "meal" and not chosen.get("calculation"):
                 chosen["calculation"] = "+".join(
                     str(food["protein"]) for food in chosen["data"].get("items", [])
                 ) or str(chosen["data"]["protein"])
             entries.append(chosen)
-        return {"entries": entries + list(changed.values())}
+        return {"entries": entries + additions}
     return proposal
 
 
 def simple_intake(message, day, profile):
     """Resolve explicit sleep and configured pill units without asking a model to guess."""
+    from .prompt_budget import chat_topics
     from .store import supplement_name
 
+    if chat_topics(message) & {"meal", "training", "cardio", "body"} or re.search(
+        r"\b(?:home|gym|in my room)\b", message, re.I
+    ):
+        return None  # The mixed proposal must retain every food and activity too.
     entries, questions = [], []
     sleep = re.search(
         r"\b(nap|night|slept|sleep)\s*(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b", message, re.I
     )
     if sleep and len(list(re.finditer(r"\b(?:nap|night|slept|sleep)\s*\d", message, re.I))) > 1:
         return None  # Let the model preserve and separate multiple sleep periods.
-    if re.search(r"\b(?:ate|meal|food|protein)\b", message, re.I):
-        return None  # Mixed meal requests require the complete structured batch path.
     if sleep:
         continuous = re.search(
             r"(\d+(?:\.\d+)?)\s*(?:h(?:rs?|ours?)?\s*)?un(?:inter\w*|iter\w*)", message, re.I
@@ -500,7 +644,9 @@ def format_assessment(context, next_steps):
 
     defaults = {
         "workouts": "Compare the same exercise, load and technique across sessions before judging strength changes.",
+        "cardio": "Log each activity's minutes and felt intensity separately so sessions remain comparable.",
         "protein": "Include portions and product labels to make food estimates easier to compare.",
+        "calories": "Complete missing calorie estimates and include portions, oils and drinks when logging meals.",
         "creatine": "Keep intake records separate from food protein and use your existing tracking goal.",
         "supplements": "Use your configured units and product labels; review any uncertain quantity before logging.",
         "sleep": "Log night sleep and naps separately, adding uninterrupted hours when useful.",
@@ -545,12 +691,26 @@ def format_assessment(context, next_steps):
         sections.append(
             f"**Workouts**\n1. **Training:** {counted(stats['workout_days'], 'logged workout day')}, {counted(stats['workout_sets'], 'set')}. Gym: {stats.get('gym_days', stats['workout_days'])} day(s); home: {stats.get('home_workout_days', 0)} day(s). {suggestion('workouts')}"
         )
+    if selected("cardio"):
+        sections.append(
+            f"**Cardio**\n{stats.get('cardio_moderate_minutes', 0):g} moderate minutes; "
+            f"{stats.get('cardio_high_minutes', 0):g} high-intensity minutes. "
+            f"Total: {stats.get('cardio_equivalent_minutes', 0):g} moderate-equivalent minutes "
+            "(one high-intensity minute counts as two moderate minutes). " + suggestion("cardio")
+        )
     intake = []
     if selected("meal"):
         fact = f"{stats['protein_g']:g} g across {counted(stats['protein_logged_days'], 'logged day')}."
         if stats["protein_g_per_logged_day"] is not None:
             fact += f" Average: {stats['protein_g_per_logged_day']:g} g per logged day."
         intake.append("**Protein:** " + fact + " " + suggestion("protein"))
+        missing = stats.get("meals_missing_calories", 0)
+        fact = f"{stats.get('calories_kcal', 0):g} kcal in recorded calorie values."
+        if missing:
+            fact += f" {counted(missing, 'meal')} missing calories; this total is incomplete."
+        else:
+            fact += " No meals in this scope are missing calories."
+        intake.append("**Calories:** " + fact + " " + suggestion("calories"))
     if selected("creatine"):
         intake.append(
             f"**Creatine:** {stats['creatine_g']:g} g in the selected records. "
@@ -605,7 +765,12 @@ def format_assessment(context, next_steps):
             sections.append(
                 "**Logged meals**\n"
                 + "\n".join(
-                    f"{i}. {entry['date']}: {entry['description']} — {entry['protein']:g} g protein."
+                    f"{i}. {entry['date']}: {entry['description']} — {entry['protein']:g} g protein; "
+                    + (
+                        f"{entry['calories']:g} kcal."
+                        if entry.get("calories") is not None
+                        else "calories unknown."
+                    )
                     for i, entry in enumerate(meals, 1)
                 )
             )
@@ -615,7 +780,7 @@ def format_assessment(context, next_steps):
             + "\n".join(f"{i}. {value}" for i, value in enumerate(intake, 1))
         )
     sections.append(
-        "Missing logs do not establish zero intake or sleep. Logging frequency alone does not measure strength or health."
+        "Missing logs do not establish zero activity, intake or sleep. Logging frequency alone does not measure strength or health."
     )
     return "\n\n".join(sections)
 

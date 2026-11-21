@@ -23,6 +23,7 @@ TASK_GUIDANCE["training"] += (
 )
 
 BATCH_GUIDANCE = """For several requested log types use action batch, proposal {entries:[{kind,data}]}, one date, max12 entries and one combined workout. Include calculation beside each meal's kind/data. When revising a pending preview, preserve untouched entries and the original date unless explicitly changed; apply only the requested correction. Drafts can be reviewed and approved in chat or Track before any save."""
+BATCH_GUIDANCE += """ Each pending batch entry has an item_id. Copy its exact item_id beside kind/data in correction proposals, even if sessions share the same activity, date or name. Return action batch for corrections to a batch; never combine separate home or cardio sessions or invent an item_id. New entries omit item_id. Keep home exercises in home_workout and explicitly requested gym exercises in workout within mixed batches."""
 
 TASK_GUIDANCE["meal"] += (
     "\nAlways estimate calories (kcal) alongside protein, both per food item and for the meal total. Include oils, sauces, drinks and additions. Calories are independent of protein: never estimate total meal calories from protein alone. Use product labels and portions first, label assumptions and uncertainty, and ask about missing portions when material. New AI meal previews require numeric calories for the total and each food item. Never fill historical unknown calories with zero."

@@ -312,11 +312,13 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
             scope = data.get("evidence_scope", {})
         kinds = scope.get("kinds", [])
         categories = {
-            "workouts": "workout",
-            "protein": "meal",
-            "creatine": "creatine",
-            "supplements": "supplement",
-            "sleep": "sleep",
+            "workouts": {"workout", "home_workout"},
+            "cardio": {"cardio"},
+            "protein": {"meal"},
+            "calories": {"meal"},
+            "creatine": {"creatine"},
+            "supplements": {"supplement"},
+            "sleep": {"sleep"},
         }
         schema = {
             "type": "object",
@@ -329,10 +331,10 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
                         category: {
                             "type": "array",
                             "items": {"type": "string", "maxLength": 220},
-                            "minItems": 1 if not kinds or kind in kinds else 0,
-                            "maxItems": 1 if not kinds or kind in kinds else 0,
+                            "minItems": 1 if not kinds or category_kinds.intersection(kinds) else 0,
+                            "maxItems": 1 if not kinds or category_kinds.intersection(kinds) else 0,
                         }
-                        for category, kind in categories.items()
+                        for category, category_kinds in categories.items()
                     },
                     "required": list(categories),
                     "additionalProperties": False,

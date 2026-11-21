@@ -4,6 +4,8 @@ import json
 import re
 from functools import lru_cache
 
+from .cardio import ACTIVITY_PATTERN
+
 
 @lru_cache(maxsize=1)
 def encodings():
@@ -46,19 +48,20 @@ def chat_topics(message, history=(), logging_kind=None):
     patterns = {
         "assessment": r"\b(assess\w*|analy[sz]\w*|patterns?|progress|consistency)\b|\b(?:review|evaluate) my\b|\bmy (?:information|data|logs)\b|\bhow (?:am i|have i been) doing\b|\bstrong and weak\b",
         "training": r"\b(workouts?|exercises?|routines?|programs?|sessions?|trained|training|sets?|reps?|bench|curls?|planks?|grow|hypertrophy|strength|arms?|biceps|triceps|forearms|fitness|lifting|gym|pushups?|situps?|push-ups?|sit-ups?|dumbbells?)\b",
-        "cardio": r"\b(cardio|badminton|swimming|swam|pickleball|cycling|cycled|running|jogging|tennis|aerobics|zumba|rowing|hiit)\b",
+        "cardio": r"\b(?:" + ACTIVITY_PATTERN + r")\b",
         "meal": r"\b(calories|kcal|protein|meal|food|ate|eat|diet|nutrition|breakfast|lunch|dinner)\b",
         "supplement": r"\b(supplements?|vitamin|vitc|vitd|b12|vit c|vit d|collagen|fish oil)\b",
         "creatine": r"\bcreatine\b",
         "sleep": r"\b(sleep|slept|nap|night|rest day|uninterrupted|uniter\w*)\b",
         "body": r"\b((?:body|my) weight|bodyweight measurement|weigh|weighed)\b",
     }
-    from .cardio import ACTIVITY_NAMES
-
-    if any(re.search(r"\b" + re.escape(name) + r"\b", query) for name in ACTIVITY_NAMES):
-        topics.add("cardio")
     for topic, pattern in patterns.items():
-        if re.search(pattern, query):
+        source = (
+            re.sub(r"\b(?:" + ACTIVITY_PATTERN + r")\b", " ", query)
+            if topic == "training"
+            else query
+        )
+        if re.search(pattern, source):
             topics.add(topic)
     kind_topic = {"workout": "training", "home_workout": "training", "plan": "training"}.get(
         logging_kind, logging_kind

@@ -1,5 +1,7 @@
 """Separate cardio logs and personal weekly intensity-equivalent targets."""
 
+import re
+
 from .goals import numeric
 
 # Moderate-equivalent minutes follow the CDC 2:1 rule; not a calorie conversion.
@@ -60,6 +62,9 @@ ACTIVITIES = {
     ],
 }
 ACTIVITY_NAMES = {name.casefold(): name for group in ACTIVITIES.values() for name in group}
+ACTIVITY_PATTERN = r"cardio|swam|swim|cycled|cycle|jog|aerobic|aerobics|run|ran|" + "|".join(
+    re.escape(name) for name in sorted(ACTIVITY_NAMES, key=len, reverse=True)
+)
 
 
 def activity_name(value):
