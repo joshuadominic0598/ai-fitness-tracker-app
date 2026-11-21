@@ -281,6 +281,30 @@ def simple_intake(message, day, profile):
                 continue
             goal = profile.get("supplement_goals", {}).get(name, {})
             measure = goal.get("measure")
+            label = r"(?:" + "|".join(re.escape(alias) for alias in aliases if alias) + r")"
+            dose = r"(\d+(?:\.\d+)?)\s*(tablets?|capsules?|softgels?)"
+            explicit_dose = re.search(r"\b" + label + r"\s*" + dose + r"\b", message, re.I)
+            explicit_dose = explicit_dose or re.search(
+                r"\b" + dose + r"\s*(?:of\s+)?" + label + r"\b", message, re.I
+            )
+            explicit_dose = explicit_dose or re.search(
+                r"\b(\d+(?:\.\d+)?)\s*" + label + r"\s*(tablets?|capsules?|softgels?)\b",
+                message,
+                re.I,
+            )
+            if explicit_dose:
+                entries.append(
+                    {
+                        "kind": "supplement",
+                        "data": {
+                            "date": day,
+                            "name": supplement_name(name),
+                            "amount": float(explicit_dose[1]),
+                            "unit": explicit_dose[2].lower().rstrip("s"),
+                        },
+                    }
+                )
+                continue
             if measure in ("tablet", "capsule", "softgel"):
                 found_alias = next(
                     re.finditer(

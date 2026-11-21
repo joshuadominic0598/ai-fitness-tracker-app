@@ -54,6 +54,7 @@ const assert = require("node:assert/strict"),
     toast: () => {},
     chatLoggingKind: null,
     chatRevisionId: null,
+    editChatPreview: async () => false,
   };
   vm.createContext(flow);
   vm.runInContext(

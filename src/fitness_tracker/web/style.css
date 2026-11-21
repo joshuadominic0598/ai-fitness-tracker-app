@@ -5309,3 +5309,34 @@ dialog.monday-datepicker::backdrop {
 .habit-day-tooltip dd { margin: 0; overflow-wrap: anywhere; }
 .habit-day-tooltip dd > span { display: block; }
 .habit-day-tooltip > p { margin-top: 10px; font-size: 10px; color: #ad9bbf; }
+
+/* Keep logging review and corrections in one exchange. */
+.coach-page .message .chat-preview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.chat-preview-actions .preview-status { color: var(--muted); font-size: 11px; }
+.chat-preview-actions .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.chat-preview-actions .btn { min-height: 32px; padding: 6px 10px; font-size: 11px; }
+.chat-preview-actions .btn:not([data-action="approve-chat-draft"]) { background: transparent; border-color: transparent; }
+.chat-preview-actions .btn:not([data-action="approve-chat-draft"]):hover { background: rgba(168, 139, 250, .1); }
+.coach-page .message.user.is-editing { width: 100%; max-width: 100%; }
+#chat-edit-input { width: 100%; min-height: 110px; max-height: 32vh; resize: vertical; font: inherit; line-height: 1.5; padding: 10px; }
+.chat-edit-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.chat-edit-actions > span { margin-right: auto; }
+.chat-edit-actions .btn { min-height: 34px; padding: 7px 12px; font-size: 12px; }
+.chat-review-hint { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.chat-review-hint .btn { padding: 7px 10px; font-size: 12px; flex-shrink: 0; }
+.chat-review-hint[hidden], .chat-compose[hidden] { display: none; }
+@media (max-width: 700px) {
+  .chat-review-hint { padding: 10px 12px; }
+  .chat-preview-actions { align-items: flex-start; }
+  .chat-preview-actions .actions { width: 100%; }
+}

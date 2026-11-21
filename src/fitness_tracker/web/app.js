@@ -552,6 +552,7 @@ function openAiLogChooser() {
   );
 }
 async function openAiLog(kind = "any", revisionId = "") {
+  if (revisionId && await editChatPreview(revisionId)) return;
   const dateInput = $("#entry-date");
   if (dateInput?.value) journalDate = dateInput.value;
   if (revisionId) {
@@ -1156,7 +1157,7 @@ function papersHtml(papers) {
 function draftHtml(d, inChat = false) {
   const entries = d.kind === "batch" ? d.data.entries : [{ data: d.data }];
   const incomplete = entries.some(item => item.data.notes?.includes("Needs clarification (not included"));
-  return `<div class="draft-card"><strong>Review your preview</strong><p>${d.kind === "batch" ? d.data.entries.length + " proposed entries" : "Proposed " + esc(d.kind)} · not saved yet</p><div class="actions">${inChat ? button(d.kind === "batch" ? "Approve & save all" : "Approve & save", "approve-chat-draft", "primary", `data-id="${d.id}" ${incomplete ? 'disabled title="Resolve the highlighted questions before approval"' : ""}`) + button("Suggest changes", "change-preview", "soft", `data-id="${d.id}"`) : ""}${button(inChat ? "View in Track" : "Review in Track", "preview-ai-draft", "soft", `data-id="${d.id}"`)}${button("Revert", "dismiss-draft", "secondary", `data-id="${d.id}"`)}</div></div>`;
+  return `<div class="draft-card ${inChat ? "chat-preview-actions" : ""}"><span class="preview-status">${d.kind === "batch" ? d.data.entries.length + " entries" : esc(d.kind === "meal" ? "Meal" : d.kind)} · not saved yet</span><div class="actions">${inChat ? button(d.kind === "batch" ? "Approve & save all" : "Approve & save", "approve-chat-draft", "primary", `data-id="${d.id}" ${incomplete || chatEdit ? 'disabled title="Finish editing and resolve any questions before approval"' : ""}`) + button("Suggest changes", "change-preview", "soft", `data-id="${d.id}"`) : ""}${button(inChat ? "View in Track" : "Review in Track", "preview-ai-draft", "soft", `data-id="${d.id}"`)}${button("Revert", "dismiss-draft", "secondary", `data-id="${d.id}"`)}</div></div>`;
 }
 function agentDetails(message) {
   const a = message.agent;
@@ -1186,6 +1187,8 @@ function chatText(text) {
   }).join("");
 }
 function messageHtml(m) {
+  if (chatEdit && m.role === "user" && chatEdit.messageId === m.id)
+    return `<article class="message user is-editing" data-message-id="${esc(m.id)}"><div class="message-meta">EDIT YOUR MESSAGE</div><form id="chat-edit-form"><label class="sr-only" for="chat-edit-input">Update your logging details</label><textarea id="chat-edit-input" rows="4" maxlength="6000" required>${esc(chatEdit.text)}</textarea><div class="chat-edit-actions"><span class="small muted">Update the details, then resend this message.</span><button type="button" class="btn secondary" data-action="cancel-chat-edit">Cancel</button><button type="submit" class="btn">Update preview</button></div><p id="chat-edit-error" class="error" role="alert"></p></form></article>`;
   if (m.role === "user")
     return `<article class="message user" data-message-id="${esc(m.id || m.request_id || "")}"><div class="message-meta">YOU</div><p>${esc(m.text)}</p>${m.status === "pending" ? '<span class="chat-message-state">Sent · awaiting your coach</span>' : m.status === "failed" ? `<div class="chat-message-failure"><span>${esc(m.error || "Could not finish this answer.")}</span><button type="button" class="link" data-action="retry-chat" data-id="${esc(m.id || m.request_id)}">Try again</button></div>` : ""}</article>`;
   const draft = m.draft && state.drafts.find((d) => d.id === m.draft.id);
@@ -1199,13 +1202,46 @@ function messageHtml(m) {
           )
           .join(" · ")}</div>`
       : ""
-  }${m.draft && !draft ? '<p class="small muted">Preview approved, replaced or reverted.</p>' : ""}${(m.notices || []).map((v) => `<p class="notice">${esc(v)}</p>`).join("")}</div></details></div>`;
+  }${m.draft && !draft ? '<p class="small muted">Preview approved, replaced or reverted.</p>' : ""}${(m.notices || []).map((v) => `<p class="notice">${esc(v)}</p>`).join("")}</div></details>${m.action === "clarify" && chatEditableExchange(null, m)?.user ? button("Edit message", "edit-chat-message", "soft", `data-id="${chatEditableExchange(null, m).user.id}"`) : ""}</div>`;
+}
+
+function chatEditableExchange(messageId = null, answer = null) {
+  const messages = state.messages || [];
+  const index = answer ? messages.indexOf(answer) - 1 : messages.findIndex(m => m.role === "user" && String(m.id) === String(messageId));
+  const user = messages[index];
+  answer = answer || messages[index + 1];
+  if (!user || user.role !== "user" || user.status === "pending" || !answer || answer.role !== "assistant" || answer.approved) return null;
+  const draft = state.drafts?.find(d => d.id === answer.draft?.id);
+  const kind = draft?.kind === "batch" ? "any" : draft?.kind || user.logging_kind;
+  if (!draft && !(answer.action === "clarify" && kind)) return null;
+  return { user, answer, draft, kind, date: user.context_date || (draft?.kind === "batch" ? draft.data.entries[0]?.data.date : draft?.data.date) || journalDate };
+}
+async function editChatPreview(draftId) {
+  const answer = state.messages?.find(m => m.role === "assistant" && m.draft?.id === draftId);
+  const exchange = answer && chatEditableExchange(null, answer);
+  if (!exchange || chatIsBusy()) return false;
+  await closeModal();
+  startChatEdit(exchange);
+  return true;
+}
+function startChatEdit(exchange) {
+  if (!exchange || chatIsBusy()) return;
+  voiceInput.cancel();
+  chatEdit = { messageId: exchange.user.id, text: exchange.user.text, kind: exchange.kind, date: exchange.date };
+  if (location.hash !== "#coach") {
+    location.hash = "coach";
+    render();
+  } else syncChatThread();
+  const input = $("#chat-edit-input");
+  input?.focus({ preventScroll: true });
+  input?.closest(".message")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 function quotaSummary(provider, connections = state.connections) {
   return `Qwen runs locally · ${n(connections.ollama_context_tokens || 8192)} context tokens`;
 }
 let chatLoggingKind = null,
   chatRevisionId = null;
+let chatEdit = null;
 let chatStage = "Received. Understanding your request…";
 let chatResearchMode = false,
   chatComposerDraft = "",
@@ -1225,10 +1261,17 @@ function chatConsentGate() {
   return `<section class="chat-consent-gate" aria-label="Coach sharing agreement"><h3>Before your first chat</h3><p>Your messages and relevant journal details are processed by <strong>Qwen through Ollama on your computer</strong>. Optional Research sends public queries to search services; your journal stays on your computer.</p><p>AI advice and estimates can be wrong and are not medical care. Proposed journal entries still need your approval.</p><form id="coach-consent-form"><label class="checkbox-label"><input type="checkbox" name="agreement" required> I agree to this sharing for future coach messages and understand these limits.</label><button class="btn section-space" type="submit">Agree & start chatting</button><p class="small muted">Remembered on your computer. Review or revoke anytime in Sharing permissions.</p><p id="coach-consent-error" class="error" role="alert"></p></form></section>`;
 }
 function chatVisibleMessages() {
-  const messages = [...state.messages];
+  let messages = [...state.messages];
+  if (optimisticChat?.edit_message_id) {
+    const original = messages.find(m => m.id === optimisticChat.edit_message_id);
+    const oldAnswer = messages[messages.indexOf(original) + 1];
+    messages = messages.filter(m => m !== oldAnswer);
+    messages = messages.map(m => m === original ? { ...m, ...optimisticChat } : m);
+  }
+  messages = messages.filter(m => !messages.some(user => user.role === "user" && user.edit_message_id && ["pending", "failed"].includes(user.status) && user.replace_response_id === m.id));
   if (
     optimisticChat &&
-    !messages.some((m) => m.request_id === optimisticChat.request_id)
+    !optimisticChat.edit_message_id && !messages.some((m) => m.request_id === optimisticChat.request_id)
   )
     messages.push(optimisticChat);
   return messages;
@@ -1257,6 +1300,7 @@ function syncChatThread(forceScroll = false) {
     chatVisibleMessages(),
     state.drafts,
     chatIsBusy(),
+    chatEdit?.messageId,
   ]);
   if (signature !== chatThreadSignature) {
     const scroll = thread.scrollTop;
@@ -1275,6 +1319,15 @@ function syncChatThread(forceScroll = false) {
   if (submit) {
     submit.disabled = chatIsBusy() || coachModelBusy;
     submit.innerHTML = chatIsBusy() ? "Generating…" : "Send " + icon("arrow");
+  }
+  const form = $("#chat-form");
+  const unresolved = [...(state.messages || [])].reverse()
+    .filter(m => m.role === "assistant").map(m => chatEditableExchange(null, m)).find(Boolean);
+  if (form) form.hidden = Boolean(chatEdit || unresolved);
+  const hint = $("#chat-review-hint");
+  if (hint) {
+    hint.hidden = Boolean(chatEdit) || !unresolved || chatIsBusy();
+    hint.innerHTML = unresolved ? `<span>${unresolved.draft ? "Review your preview, then approve or edit your message." : "Add the missing details to your message."}</span>${button("Edit message", "edit-chat-message", "soft", `data-id="${unresolved.user.id}"`)}` : "";
   }
   setCoachControlsDisabled(chatIsBusy() || coachModelBusy);
   updateChatVoiceControls();
@@ -1550,7 +1603,7 @@ function updateChatVoiceControls() {
   if (submit) submit.disabled = chatIsBusy() || coachModelBusy || voiceInput.isBusy();
 }
 function coach() {
-  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="1" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
+  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div><div id="chat-review-hint" class="chat-review-hint" hidden></div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="1" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
 }
 function goalProgress(key, reference = journalDate) {
   return GoalTracking.progress(
@@ -2165,6 +2218,7 @@ function prepareCoachMessage(message) {
   chatComposerDraft = message;
   chatLoggingKind = null;
   chatRevisionId = null;
+  chatEdit = null;
   const options = $(".chat-options");
   if (options) options.open = false;
   const input = $("#chat-input");
@@ -2175,11 +2229,12 @@ function prepareCoachMessage(message) {
   }
 }
 
-async function sendChat(event, approvalId = null, retryRequestId = null) {
+async function sendChat(event, approvalId = null, retryRequestId = null, editMessageId = null) {
   event.preventDefault();
   if (chatIsBusy()) return;
-  const input = $("#chat-input"),
-    error = $("#chat-error");
+  const editing = editMessageId && chatEdit;
+  const input = editing ? $("#chat-edit-input") : $("#chat-input"),
+    error = editing ? $("#chat-edit-error") : $("#chat-error");
   if (voiceInput.isBusy()) {
     error.textContent = "Stop or cancel audio and review the transcript before sending.";
     return;
@@ -2205,8 +2260,8 @@ async function sendChat(event, approvalId = null, retryRequestId = null) {
     return;
   }
   const request_id = retryRequestId || crypto.randomUUID();
-  const logging_kind = chatLoggingKind,
-    revise_draft_id = chatRevisionId;
+  const logging_kind = editing ? editing.kind : chatLoggingKind,
+    revise_draft_id = editing ? null : chatRevisionId;
   const research =
     logging_kind && logging_kind !== "any" ? false : chatResearchMode;
   chatResearchMode = false;
@@ -2214,7 +2269,7 @@ async function sendChat(event, approvalId = null, retryRequestId = null) {
   if ($("#chat-mode-label")) $("#chat-mode-label").textContent = "Quick chat";
   const options = $(".chat-options");
   if (options) options.open = false;
-  optimisticChat = {
+  optimisticChat = approvalId ? null : {
     role: "user",
     text: message,
     request_id,
@@ -2222,25 +2277,28 @@ async function sendChat(event, approvalId = null, retryRequestId = null) {
     research,
     logging_kind,
     revise_draft_id,
+    ...(editMessageId ? { edit_message_id: editMessageId } : {}),
   };
   chatStage = "Received. Understanding your request…";
   chatBusy = true;
+  if (editing) chatEdit = null;
   if (!approvalId) {
     input.value = "";
     chatComposerDraft = "";
     resizeChatComposer();
   }
-  syncChatThread(true);
-  ensureChatPolling();
   try {
+    syncChatThread(true);
+    ensureChatPolling();
     const reply = await api("chat", {
       message,
       stream: true,
       request_id,
-      date: journalDate,
+      date: editing ? editing.date : journalDate,
       research,
       logging_kind,
       revise_draft_id,
+      ...(editMessageId ? { edit_message_id: editMessageId } : {}),
       ...(approvalId ? { approve_draft_id: approvalId } : {}),
     });
     await refresh(false);
@@ -2255,6 +2313,7 @@ async function sendChat(event, approvalId = null, retryRequestId = null) {
       chatRevisionId = null;
     }
   } catch (failure) {
+    if (approvalId) toast(failure.message);
     try {
       await refreshChatSnapshot();
     } catch {
@@ -2297,6 +2356,13 @@ async function sendChat(event, approvalId = null, retryRequestId = null) {
 async function action(name, el) {
   const id = el.dataset.id;
   switch (name) {
+    case "edit-chat-message":
+      startChatEdit(chatEditableExchange(id));
+      break;
+    case "cancel-chat-edit":
+      chatEdit = null;
+      syncChatThread();
+      break;
     case "voice-record":
       if (!chatIsBusy() && !coachModelBusy) await voiceInput.record();
       break;
@@ -2327,6 +2393,7 @@ async function action(name, el) {
         chatComposerDraft = "";
         chatLoggingKind = null;
         chatRevisionId = null;
+        chatEdit = null;
         chatResearchMode = false;
         await refreshChatSnapshot();
         render();
@@ -2380,7 +2447,11 @@ async function action(name, el) {
       if (chatIsBusy()) break;
       const message =
         state.messages.find((item) => String(item.id) === id) || optimisticChat;
-      if (message && $("#chat-input")) {
+      if (message?.edit_message_id) {
+        chatEdit = { messageId: message.edit_message_id, text: message.text, kind: message.logging_kind, date: message.context_date || journalDate };
+        syncChatThread();
+        await sendChat({ preventDefault() {} }, null, message.request_id, message.edit_message_id);
+      } else if (message && $("#chat-input")) {
         chatResearchMode = message.research === true;
         chatLoggingKind = message.logging_kind || null;
         chatRevisionId = message.revise_draft_id || null;
@@ -2724,6 +2795,7 @@ async function action(name, el) {
       await showAiPreview(id);
       break;
     case "approve-chat-draft":
+      if (chatEdit) break;
       await sendChat({ preventDefault() {} }, id);
       break;
     case "view-approved-track":
@@ -2949,7 +3021,7 @@ document.addEventListener(
       }
     }
     if (
-      event.target.id === "chat-input" &&
+      ["chat-input", "chat-edit-input"].includes(event.target.id) &&
       event.key === "Enter" &&
       !event.shiftKey &&
       !event.isComposing &&
@@ -2957,7 +3029,7 @@ document.addEventListener(
     ) {
       event.preventDefault();
       if (!event.repeat && !chatIsBusy() && !coachModelBusy)
-        $("#chat-form")?.requestSubmit();
+        $(event.target.id === "chat-edit-input" ? "#chat-edit-form" : "#chat-form")?.requestSubmit();
       return;
     }
     const options = $("#workout-options");
@@ -2977,6 +3049,7 @@ document.addEventListener("wheel", (event) => {
 }, { capture: true, passive: true });
 document.addEventListener("input", (event) => {
   const el = event.target;
+  if (el.id === "chat-edit-input" && chatEdit) chatEdit.text = el.value;
   if (el.id === "chat-input") {
     chatComposerDraft = el.value;
     resizeChatComposer();
@@ -3153,6 +3226,10 @@ document.addEventListener("change", (event) => {
 });
 document.addEventListener("submit", async (event) => {
   const form = event.target;
+  if (form.id === "chat-edit-form") {
+    sendChat(event, null, null, chatEdit?.messageId);
+    return;
+  }
   if (form.id === "chat-form") {
     sendChat(event);
     return;

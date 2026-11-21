@@ -247,7 +247,7 @@ def draft_message(draft):
                 lines.append("\n**Notes:** " + notes)
         sections.append("\n".join(lines))
     sections.append(
-        "Tell me what to change, or approve it here when everything looks right. "
+        "Use Suggest changes to edit your message, or approve it here when everything looks right. "
         "Nothing is saved until you approve."
     )
     return "\n\n".join(sections)

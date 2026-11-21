@@ -10,7 +10,7 @@ const source = fs.readFileSync(require.resolve("../src/fitness_tracker/web/app.j
   ].join("\n"));
   let offset = 0;
   const ctx = {
-    state: { token: "test-session" }, TextDecoder,
+    state: { token: "test-session" }, chatEdit: null, TextDecoder,
     $: () => status, chatStage: "",
     fetch: async () => {
       calls++;
@@ -41,6 +41,6 @@ const source = fs.readFileSync(require.resolve("../src/fitness_tracker/web/app.j
   assert.doesNotMatch(html, /<script>/);
   vm.runInContext(source.slice(source.indexOf("function draftHtml("), source.indexOf("function agentDetails(")), ctx);
   const draft = ctx.draftHtml({ id: "draft", kind: "workout", data: { notes: "Needs clarification (not included in the sets above): Curl equipment?" } }, true);
-  assert.match(draft, /disabled title="Resolve/);
+  assert.match(draft, /disabled title="Finish editing/);
   console.log("Coach streaming passed: chunked Unicode, stages, validated final response, lists, links and unresolved approval controls.");
 })().catch(error => { console.error(error); process.exitCode = 1; });
