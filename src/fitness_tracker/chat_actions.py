@@ -126,7 +126,12 @@ def requested_log_kind(message, history=()):
             if len(topics) > 1:
                 return "any"
             topic = topics.pop()
-            if topic == "training" and re.search(r"\b(?:home|at home|in my room)\b", message, re.I):
+            location = (
+                message
+                if re.search(r"\b(?:home|gym|in my room)\b", message, re.I)
+                else value
+            )
+            if topic == "training" and re.search(r"\b(?:home|in my room)\b", location, re.I):
                 return "home_workout"
             return {"training": "workout"}.get(topic, topic)
     return "any"
