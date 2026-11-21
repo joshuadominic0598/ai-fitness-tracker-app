@@ -185,7 +185,11 @@ def draft_message(draft):
         ["**Partial workout preview** — resolve the questions below before approval."]
         if incomplete
         else []
-    ) + [draft_summary(draft)]
+    ) + (
+        [f"Meal preview for {draft['data']['date']}"]
+        if draft["kind"] == "meal" and draft["data"].get("items")
+        else [draft_summary(draft)]
+    )
     for item in items:
         if item["kind"] == "meal":
             data = item["data"]

@@ -539,7 +539,12 @@ class Coach:
             revise_draft_id = revise_draft_id or pending_revision(message, history, drafts)
             if departed:
                 revise_draft_id = None
-            if active and not departed and requested_kind in (None, "any", task.get("kind")):
+            if (
+                active
+                and not revise_draft_id
+                and not departed
+                and requested_kind in (None, "any", task.get("kind"))
+            ):
                 revise_draft_id = active["id"]
             workout_source = re.sub(r"^\s*YOU\s*\n", "", message, flags=re.I).strip()
             workout_followup = False
@@ -821,10 +826,36 @@ class Coach:
                             if assessment
                             else "lesson"
                             if exercise
+                            else "meal_revision"
+                            if revision and revision["kind"] == "meal"
                             else "meal"
-                            if logging_kind == "meal" or (revision and revision["kind"] == "meal")
+                            if logging_kind == "meal"
                             else None,
                         )
+                        if revision and reply["action"] == "answer":
+                            self.stage("Applying your changes to the preview…")
+                            reply = self.generate(
+                                messages
+                                + [
+                                    {
+                                        "role": "system",
+                                        "content": (
+                                            "The previous attempt returned commentary without updating the pending draft. "
+                                            "Apply the user's requested correction to pending_draft and return a structured "
+                                            "proposal, preserving all untouched items and entries. Do not claim a change "
+                                            "in message alone. If essential information is missing, use clarify and ask "
+                                            "one specific question. Nothing is saved yet."
+                                        ),
+                                    }
+                                ],
+                                provider,
+                                model,
+                                key,
+                                direct=True,
+                                response_kind="meal_revision"
+                                if revision["kind"] == "meal"
+                                else None,
+                            )
                 if (
                     workout_only
                     and isinstance(reply.get("proposal"), dict)
@@ -1055,7 +1086,12 @@ class Coach:
                     "Your notes are still in this chat. "
                     + (proposal_error or "The meal total does not match its calculation.")
                 )
-            elif requested_kind and not response.get("draft") and response["action"] == "answer":
+            elif (
+                requested_kind
+                and not revision
+                and not response.get("draft")
+                and response["action"] == "answer"
+            ):
                 response["action"] = "clarify"
                 response["text"] = (
                     "I couldn't prepare a structured preview from that reply. Nothing was saved. "
@@ -1082,6 +1118,12 @@ class Coach:
                     for row in context["retrieved_evidence"]
                 ]
             if revision and not response.get("draft"):
+                if response["action"] != "clarify":
+                    response["action"] = "clarify"
+                    response["text"] = (
+                        "I couldn't apply that change to the preview. The existing preview below "
+                        "is unchanged; nothing was saved. Please retry the correction."
+                    )
                 response["draft"] = revision
                 response["text"] += "\n\n" + draft_message(revision)
             if departed:
