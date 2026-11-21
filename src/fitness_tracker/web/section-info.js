@@ -108,7 +108,9 @@
   });
   document.addEventListener("keydown", event => { if (event.key === "Escape") hide(); });
   window.addEventListener("resize", hide);
-  window.addEventListener("scroll", hide, true);
+  window.addEventListener("scroll", event => {
+    if (event.target !== popup) hide();
+  }, true);
   new MutationObserver(annotate).observe(content, { childList: true, subtree: true });
   annotate();
 })();
