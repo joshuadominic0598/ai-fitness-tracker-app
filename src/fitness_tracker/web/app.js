@@ -1213,6 +1213,7 @@ function chatEditableExchange(messageId = null, answer = null) {
   if (!user || user.role !== "user" || user.status === "pending" || !answer || answer.role !== "assistant" || answer.approved) return null;
   const draft = state.drafts?.find(d => d.id === answer.draft?.id);
   const kind = draft?.kind === "batch" ? "any" : draft?.kind || user.logging_kind;
+  if (user.revise_draft_id && !draft) return null;
   if (!draft && !(answer.action === "clarify" && kind)) return null;
   return { user, answer, draft, kind, date: user.context_date || (draft?.kind === "batch" ? draft.data.entries[0]?.data.date : draft?.data.date) || journalDate };
 }
@@ -1227,6 +1228,18 @@ async function editChatPreview(draftId) {
 function startChatEdit(exchange) {
   if (!exchange || chatIsBusy()) return;
   voiceInput.cancel();
+  if (exchange.user.revise_draft_id && exchange.draft) {
+    prepareCoachMessage(exchange.user.text);
+    chatRevisionId = exchange.draft.id;
+    chatLoggingKind = exchange.kind;
+    journalDate = exchange.date;
+    if (location.hash !== "#coach") {
+      location.hash = "coach";
+      render();
+    } else syncChatThread();
+    $("#chat-input")?.focus();
+    return;
+  }
   chatEdit = { messageId: exchange.user.id, text: exchange.user.text, kind: exchange.kind, date: exchange.date };
   if (location.hash !== "#coach") {
     location.hash = "coach";

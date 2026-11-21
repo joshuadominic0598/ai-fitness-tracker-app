@@ -3,7 +3,7 @@ const fs = require("node:fs"), vm = require("node:vm"), assert = require("node:a
 const source = fs.readFileSync(require.resolve("../src/fitness_tracker/web/app.js"), "utf8");
 (async () => {
   const input = { value: "Log my food: bread and milk", focus() {}, closest: () => ({ scrollIntoView() {} }) };
-  const mainInput = { value: "", style: {} }, error = { textContent: "" };
+  const mainInput = { value: "", style: {}, focus() {} }, error = { textContent: "" };
   const draft = { id: "original-draft", kind: "meal", data: { date: "2026-11-20", items: [] } };
   let finish, payload, rendered = 0;
   const ctx = {
@@ -69,5 +69,16 @@ const source = fs.readFileSync(require.resolve("../src/fitness_tracker/web/app.j
   }
   ctx.state.messages[0].status = "pending";
   assert.equal(ctx.chatVisibleMessages().length, 1, "polling and reload hide the superseded answer while updating");
+  ctx.state.messages[0] = { ...ctx.state.messages[0], status: "sent", text: "Change the milk to 400ml", revise_draft_id: "earlier-preview" };
+  ctx.startChatEdit(ctx.chatEditableExchange(1));
+  assert.equal(ctx.chatEdit, null, "a follow-up correction stays in the patch workflow");
+  assert.equal(ctx.chatRevisionId, revised.id);
+  assert.equal(mainInput.value, "Change the milk to 400ml");
+  mainInput.value = "Change the milk to 600ml";
+  const patchRequest = ctx.sendChat({ preventDefault() {} });
+  assert.equal(payload.revise_draft_id, revised.id);
+  assert.equal(payload.edit_message_id, undefined);
+  finish({ draft: revised });
+  await patchRequest;
   console.log("Chat edits passed: inline source editing, one exchange, original date, full replacement, compact actions and pending recovery.");
 })().catch(error => { console.error(error); process.exitCode = 1; });
