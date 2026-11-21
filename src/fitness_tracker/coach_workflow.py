@@ -142,6 +142,30 @@ def correct_workout_source(source, message, choices=()):
     return "\n".join(lines) if changed else combine_source(source, message)
 
 
+def removed_food_names(message, items):
+    """Only explicit named removals may discard omitted foods from a correction."""
+    removed = set()
+    for match in re.finditer(
+        r"\b(?:remove|delete|drop|omit|exclude)\s+(.+?)(?=[.;\n]|\b(?:keep|retain|leave|preserve|add|change|update|replace|but|not|from)\b|$)",
+        message,
+        re.I,
+    ):
+        if re.search(r"\b(?:don't|do not|never)\s*$", message[: match.start()], re.I):
+            continue
+        clause = " ".join(re.findall(r"[\w]+", match[1].casefold()))
+        for item in items:
+            name = item["name"].strip().casefold()
+            words = re.findall(r"[\w]+", name)
+            if not words:
+                continue
+            aliases = [" ".join(words)]
+            if len(words[-1]) >= 3 and words[-1] not in {"food", "portion", "cooked", "raw"}:
+                aliases.append(words[-1])
+            if any(re.search(r"\b" + re.escape(alias) + r"\b", clause) for alias in aliases):
+                removed.add(name)
+    return removed
+
+
 def merge_revision(original, kind, proposal, message):
     """A partial model reply is a patch, never permission to erase untouched items."""
     if not isinstance(proposal, dict):
@@ -160,12 +184,21 @@ def merge_revision(original, kind, proposal, message):
                 continue
             result.append(changed.pop(ex["exercise_id"], ex))
         return {**old, **proposal, "exercises": result + list(changed.values())}
-    if original["kind"] == "meal" and kind == "meal" and old.get("items") and proposal.get("items"):
+    if (
+        original["kind"] == "meal"
+        and kind == "meal"
+        and old.get("items")
+        and isinstance(proposal.get("items"), list)
+    ):
         changed = {item["name"].strip().casefold(): item for item in proposal["items"]}
         correction = re.split(r"\bChange:\s*", message, flags=re.I)[-1]
         adding = bool(re.search(r"\badd\b", correction, re.I))
+        removed = removed_food_names(correction, old["items"])
         items = []
         for item in old["items"]:
+            if item["name"].strip().casefold() in removed:
+                changed.pop(item["name"].strip().casefold(), None)
+                continue
             update = changed.pop(item["name"].strip().casefold(), item)
             # An addition is not permission to silently re-estimate other foods.
             words = re.findall(r"[a-z]{3,}", item["name"].casefold())
@@ -182,6 +215,8 @@ def merge_revision(original, kind, proposal, message):
         }
         if all(item.get("calories") is not None for item in items):
             result["calories"] = round(sum(float(item["calories"]) for item in items), 2)
+        if removed:
+            result["description"] = ", ".join(f"{item['portion']} {item['name']}" for item in items)
         if adding:
             # Carry forward the existing uncertainty, adding the new contribution.
             delta = result["protein"] - float(old["protein"])

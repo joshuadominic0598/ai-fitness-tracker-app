@@ -1253,6 +1253,7 @@ function chatEditableExchange(messageId = null, answer = null) {
   if (!user || user.role !== "user" || user.status === "pending" || !answer || answer.role !== "assistant" || answer.approved) return null;
   const draft = state.drafts?.find(d => d.id === answer.draft?.id);
   const kind = draft?.kind === "batch" ? "any" : draft?.kind || user.logging_kind;
+  if (user.revise_draft_id && !draft) return null;
   if (!draft && !(answer.action === "clarify" && kind)) return null;
   return { user, answer, draft, kind, date: user.context_date || (draft?.kind === "batch" ? draft.data.entries[0]?.data.date : draft?.data.date) || journalDate };
 }
@@ -1267,6 +1268,18 @@ async function editChatPreview(draftId) {
 function startChatEdit(exchange) {
   if (!exchange || chatIsBusy()) return;
   voiceInput.cancel();
+  if (exchange.user.revise_draft_id && exchange.draft) {
+    prepareCoachMessage(exchange.user.text);
+    chatRevisionId = exchange.draft.id;
+    chatLoggingKind = exchange.kind;
+    journalDate = exchange.date;
+    if (location.hash !== "#coach") {
+      location.hash = "coach";
+      render();
+    } else syncChatThread();
+    $("#chat-input")?.focus();
+    return;
+  }
   chatEdit = { messageId: exchange.user.id, text: exchange.user.text, kind: exchange.kind, date: exchange.date };
   if (location.hash !== "#coach") {
     location.hash = "coach";
@@ -1362,8 +1375,9 @@ function syncChatThread(forceScroll = false) {
   }
   const form = $("#chat-form");
   const unresolved = [...(state.messages || [])].reverse()
-    .filter(m => m.role === "assistant").map(m => chatEditableExchange(null, m)).find(Boolean);
-  if (form) form.hidden = Boolean(chatEdit || unresolved);
+    .filter(m => m.role === "assistant").map(m => chatEditableExchange(null, m))
+    .find(exchange => exchange && (exchange.draft || exchange.answer === state.messages[state.messages.length - 1]));
+  if (form) form.hidden = Boolean(chatEdit);
   const hint = $("#chat-review-hint");
   if (hint) {
     hint.hidden = Boolean(chatEdit) || !unresolved || chatIsBusy();
@@ -2508,7 +2522,7 @@ async function action(name, el) {
     case "retry-chat": {
       if (chatIsBusy()) break;
       const message =
-        state.messages.find((item) => String(item.id) === id) || optimisticChat;
+        chatVisibleMessages().find((item) => String(item.id) === id) || optimisticChat;
       if (message?.edit_message_id) {
         chatEdit = { messageId: message.edit_message_id, text: message.text, kind: message.logging_kind, date: message.context_date || journalDate };
         syncChatThread();
