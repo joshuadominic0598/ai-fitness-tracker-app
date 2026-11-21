@@ -2446,7 +2446,7 @@ async function action(name, el) {
     case "retry-chat": {
       if (chatIsBusy()) break;
       const message =
-        state.messages.find((item) => String(item.id) === id) || optimisticChat;
+        chatVisibleMessages().find((item) => String(item.id) === id) || optimisticChat;
       if (message?.edit_message_id) {
         chatEdit = { messageId: message.edit_message_id, text: message.text, kind: message.logging_kind, date: message.context_date || journalDate };
         syncChatThread();
