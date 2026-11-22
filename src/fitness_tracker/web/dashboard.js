@@ -115,7 +115,6 @@
       value = Math.min(
         total / (profile.sleep_goal || 7),
         night / (profile.night_hours_goal || 6),
-        1,
       );
       logged = selected.length > 0;
       note = `${total}h total · ${night}h night · ${Math.round(value * 100)}% of sleep goals`;

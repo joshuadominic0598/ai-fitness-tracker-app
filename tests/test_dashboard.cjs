@@ -58,9 +58,21 @@ assert.ok(
 );
 assert.equal(
   d.calendar(entries, profile, "2026-11", "sleep", "2026-11-12").days[8].ratio,
-  1,
-  "night sleep plus naps can meet both core goals",
+  7.5 / 7,
+  "night sleep plus naps can exceed both core goals without a 100% cap",
 );
+const fullSleepWeek = Array.from({ length: 7 }, (_, i) => ({
+  kind: "sleep", date: `2026-11-${String(9 + i).padStart(2, "0")}`, period: "night", hours: 8,
+}));
+const sleepCalendar = d.calendar([...fullSleepWeek, { kind: "sleep", date: "2026-11-23", period: "night", hours: 12 }], profile, "2026-11", "sleep", "2026-11-22");
+assert.ok(Math.abs(sleepCalendar.days[8].ratio - 8 / 7) < 1e-9);
+assert.ok(Math.abs(sleepCalendar.weeks.find(w => w.start === "2026-11-09").percent - 800 / 7) < 1e-9, "weekly sleep coverage is uncapped too");
+assert.equal(sleepCalendar.days[22].ratio, 0, "future sleep does not receive credit");
+const napHeavy = d.calendar([
+  { kind: "sleep", date: "2026-11-09", period: "night", hours: 5 },
+  { kind: "sleep", date: "2026-11-09", period: "afternoon", hours: 5 },
+], profile, "2026-11", "sleep", "2026-11-22");
+assert.equal(napHeavy.days[8].ratio, 5 / 6, "the night goal still applies when naps exceed the total-rest goal");
 assert.equal(
   d.calendar(entries, profile, "2028-02", "workout", "2028-02-29").days.length,
   29,

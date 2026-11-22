@@ -2766,39 +2766,39 @@ a {
 }
 .activity-day.met,
 .activity-legend .met {
-  background: #16fa71;
-  border-color: #16fa71;
-  color: #063214;
+  background: #25e37f;
+  border-color: #25e37f;
+  color: #073821;
 }
 .activity-day.near,
 .activity-legend .near {
-  background: #63df77;
-  border-color: #63df77;
-  color: #13391b;
+  background: #66cf91;
+  border-color: #66cf91;
+  color: #123b28;
 }
 .activity-day.partial,
 .activity-legend .partial {
-  background: #b7e889;
-  border-color: #b7e889;
-  color: #243715;
+  background: #c4e6b1;
+  border-color: #c4e6b1;
+  color: #213d27;
 }
 .activity-day.mid,
 .activity-legend .mid {
-  background: #f5df54;
-  border-color: #f5df54;
-  color: #332e08;
+  background: #f1ce61;
+  border-color: #f1ce61;
+  color: #332b10;
 }
 .activity-day.low,
 .activity-legend .low {
-  background: #ff9c3d;
-  border-color: #ff9c3d;
-  color: #3a2108;
+  background: #ed9a4b;
+  border-color: #ed9a4b;
+  color: #352314;
 }
 .activity-day.critical,
 .activity-legend .critical {
-  background: #d84960;
-  border-color: #d84960;
-  color: #fff7f8;
+  background: #b93d55;
+  border-color: #b93d55;
+  color: #fff1f3;
 }
 .activity-day.future {
   opacity: 0.4;
