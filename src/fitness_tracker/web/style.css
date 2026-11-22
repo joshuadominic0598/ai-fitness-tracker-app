@@ -2778,8 +2778,8 @@ a {
 }
 .activity-day.partial,
 .activity-legend .partial {
-  background: #c4e6b1;
-  border-color: #c4e6b1;
+  background: #9bd84b;
+  border-color: #9bd84b;
   color: #213d27;
 }
 .activity-day.mid,
@@ -2790,9 +2790,9 @@ a {
 }
 .activity-day.low,
 .activity-legend .low {
-  background: #ed9a4b;
-  border-color: #ed9a4b;
-  color: #352314;
+  background: #cc7428;
+  border-color: #cc7428;
+  color: #241407;
 }
 .activity-day.critical,
 .activity-legend .critical {
