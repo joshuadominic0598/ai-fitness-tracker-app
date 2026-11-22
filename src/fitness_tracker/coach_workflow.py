@@ -787,19 +787,37 @@ def format_assessment(context, next_steps):
 
 def stated_day(message, reference_day):
     """Resolve explicit ISO or day-month dates; never guess a different journal year."""
-    from datetime import date
+    from datetime import date, timedelta
 
     iso = re.search(r"\b\d{4}-\d{2}-\d{2}\b", message)
     if iso:
         return date.fromisoformat(iso[0]).isoformat()
+    numeric = re.search(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b", message)
+    if numeric:
+        return date(int(numeric[3]), int(numeric[2]), int(numeric[1])).isoformat()
     match = re.search(
         r"\b(\d{1,2})(?:st|nd|rd|th)?\s*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b(?:[, ]+(\d{4}))?",
         message,
         re.I,
     )
-    if not match:
-        return None
     months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    if not match:
+        month_first = re.search(
+            r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:[, ]+(\d{4}))?",
+            message,
+            re.I,
+        )
+        if month_first:
+            return date(
+                int(month_first[3] or reference_day[:4]),
+                months.index(month_first[1][:3].lower()) + 1,
+                int(month_first[2]),
+            ).isoformat()
+        if re.search(r"\byesterday\b", message, re.I):
+            return (date.today() - timedelta(days=1)).isoformat()
+        if re.search(r"\btoday\b", message, re.I):
+            return date.today().isoformat()
+        return None
     return date(
         int(match[3] or reference_day[:4]), months.index(match[2][:3].lower()) + 1, int(match[1])
     ).isoformat()

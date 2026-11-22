@@ -185,6 +185,7 @@ class Handler(BaseHTTPRequestHandler):
                 body.get("approve_draft_id"),
                 progress=emit,
                 edit_message_id=body.get("edit_message_id"),
+                meal_totals=body.get("meal_totals"),
             )
             emit({"type": "final", "response": result})
         except ValueError as error:
@@ -376,6 +377,7 @@ class Handler(BaseHTTPRequestHandler):
                     body.get("logging_kind"),
                     body.get("approve_draft_id"),
                     edit_message_id=body.get("edit_message_id"),
+                    meal_totals=body.get("meal_totals"),
                 )
             elif path == "/api/draft-preview":
                 result = store.preview(body.get("id"))

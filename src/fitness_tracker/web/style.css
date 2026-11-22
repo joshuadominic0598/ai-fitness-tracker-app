@@ -2766,39 +2766,39 @@ a {
 }
 .activity-day.met,
 .activity-legend .met {
-  background: #1d654b;
-  border-color: #4b9b73;
-  color: #e2fbed;
+  background: #16fa71;
+  border-color: #16fa71;
+  color: #063214;
 }
 .activity-day.near,
 .activity-legend .near {
-  background: #244d4b;
-  border-color: #4a8b82;
-  color: #d6eee8;
+  background: #63df77;
+  border-color: #63df77;
+  color: #13391b;
 }
 .activity-day.partial,
 .activity-legend .partial {
-  background: #78411f;
-  border-color: #d58c4c;
-  color: #ffe5cc;
+  background: #b7e889;
+  border-color: #b7e889;
+  color: #243715;
 }
 .activity-day.mid,
 .activity-legend .mid {
-  background: #66571d;
-  border-color: #bdad54;
-  color: #fff3b5;
+  background: #f5df54;
+  border-color: #f5df54;
+  color: #332e08;
 }
 .activity-day.low,
 .activity-legend .low {
-  background: #633d49;
-  border-color: #b97685;
-  color: #ffe0e5;
+  background: #ff9c3d;
+  border-color: #ff9c3d;
+  color: #3a2108;
 }
 .activity-day.critical,
 .activity-legend .critical {
-  background: #782f3a;
-  border-color: #ce5967;
-  color: #ffe5e8;
+  background: #d84960;
+  border-color: #d84960;
+  color: #fff7f8;
 }
 .activity-day.future {
   opacity: 0.4;
@@ -5499,6 +5499,18 @@ dialog.monday-datepicker::backdrop {
 .meal-nutrients span { color: #b9a6d0; font-size: 11px; font-weight: 400; }
 @media (max-width: 850px) {
   .cardio-week-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.coach-log-date { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #9374b342; border-radius: 12px; background: #9374b30c; }
+.coach-log-date label { flex: 0 0 165px; margin: 0; font-size: 12px; }
+.coach-log-date input { margin-top: 4px; width: 100%; min-width: 0; }
+.coach-log-date p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.coach-log-date strong { color: var(--ink); }
+.meal-total-fields { min-width: 0; margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.meal-total-fields legend { max-width: 100%; padding: 0 6px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .coach-log-date { flex-direction: column; align-items: stretch; gap: 8px; }
+  .coach-log-date label { flex-basis: auto; }
 }
 
 .journal-home,

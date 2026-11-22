@@ -151,6 +151,8 @@ def require_meal_calories(proposal):
     """New AI estimates need both nutrients; older saved meals remain readable."""
     if not isinstance(proposal, dict):
         raise ValueError("Prepare a meal object with protein and calories.")
+    if proposal.get("confirmed_totals"):
+        raise ValueError("Only your manual approval can confirm adjusted meal totals.")
     items = proposal.get("items", [])
     if not isinstance(items, list):
         raise ValueError("Prepare a food item list with protein and calories.")
@@ -179,6 +181,8 @@ def draft_summary(draft):
             parts.append(f"{data['protein']:g} g protein ({description})")
             if data.get("calories") is not None:
                 parts[-1] += f"; {data['calories']:g} kcal"
+            if data.get("confirmed_totals"):
+                parts[-1] += "; totals adjusted by you"
             if data.get("low") is not None and data.get("high") is not None:
                 parts[-1] += f"; estimated range {data['low']:g}–{data['high']:g} g"
         elif kind == "cardio":
@@ -248,6 +252,10 @@ def draft_message(draft):
                     lines.append(f"Estimated range: {data['low']:g}–{data['high']:g} g")
             if data.get("notes"):
                 lines.append("Assumptions: " + data["notes"])
+            if data.get("confirmed_totals"):
+                lines.append(
+                    "Totals adjusted by you. The food breakdown retains the original AI estimates."
+                )
             if lines:
                 sections.append("\n".join(lines))
             continue
@@ -297,7 +305,58 @@ def draft_message(draft):
     return "\n\n".join(sections)
 
 
-def approve_from_chat(store, message, history, draft_id=None):
+def adjusted_meal_totals(draft, adjustments):
+    """Change only confirmed totals; preserve the original per-food AI estimates."""
+    from .store import number
+
+    if not isinstance(adjustments, list) or not 1 <= len(adjustments) <= 12:
+        raise ValueError("Provide totals for one or more meals in this preview.")
+    data = deepcopy(draft["data"])
+    items = data["entries"] if draft["kind"] == "batch" else [{"kind": draft["kind"], "data": data}]
+    used = set()
+    for adjustment in adjustments:
+        if not isinstance(adjustment, dict) or set(adjustment) - {
+            "item_id",
+            "protein",
+            "calories",
+            "low",
+            "high",
+        }:
+            raise ValueError("Adjust protein or calories for a meal in this preview.")
+        item_id = adjustment.get("item_id")
+        matches = [
+            item for item in items if item["kind"] == "meal" and item.get("item_id") == item_id
+        ]
+        if len(matches) != 1 or item_id in used:
+            raise ValueError("Choose each meal in the pending preview only once.")
+        used.add(item_id)
+        meal = matches[0]["data"]
+        values = {
+            key: number(adjustment[key], "Meal " + key, 0, 500 if key == "protein" else 10000)
+            for key in ("protein", "calories")
+            if key in adjustment
+        }
+        if not values:
+            raise ValueError("Enter protein or calories before approving adjusted totals.")
+        for key, value in values.items():
+            if meal.get(key) != value:
+                meal.setdefault("confirmed_totals", {})[key] = value
+                meal[key] = value
+                if key == "protein":
+                    meal.pop("low", None)
+                    meal.pop("high", None)
+        if "low" in adjustment or "high" in adjustment:
+            low, high = adjustment.get("low"), adjustment.get("high")
+            if (low is None) != (high is None):
+                raise ValueError("Enter both ends of the protein range, or leave both blank.")
+            for key in ("low", "high"):
+                meal.pop(key, None)
+                if adjustment.get(key) is not None:
+                    meal[key] = number(adjustment[key], "Protein range " + key, 0, 500)
+    return data
+
+
+def approve_from_chat(store, message, history, draft_id=None, meal_totals=None):
     """Approve only an explicit confirmation of a preview linked in recent chat."""
     if not re.fullmatch(
         r"\s*(?:(?:yes|ok|okay)[,!. ]+)?(?:i approve(?: it| this| the preview)?|approve(?: it| this| the preview)?|(?:save|log) (?:it|this|the preview))(?:[,! .]+please)?[.! ]*\s*",
@@ -324,7 +383,10 @@ def approve_from_chat(store, message, history, draft_id=None):
             "action": "answer",
             "text": "There is no pending preview linked to this conversation to approve. Nothing was saved. Ask me to prepare the entry, or open its pending preview in Track.",
         }
-    result = store.approve(draft["id"])
+    edited = adjusted_meal_totals(draft, meal_totals) if meal_totals is not None else None
+    result = store.approve(draft["id"], edited)
+    if edited is not None:
+        draft = {**draft, "data": edited}
     entries = result.get("entries", [result])
     day = entries[0]["date"]
     return {

@@ -233,6 +233,18 @@ def validate(kind, raw):
         )
         if raw.get("calories") not in (None, ""):
             d["calories"] = number(raw["calories"], "Calories (kcal)", 0, 10000)
+        confirmed = raw.get("confirmed_totals", {})
+        if not isinstance(confirmed, dict) or set(confirmed) - {"protein", "calories"}:
+            raise ValueError("Choose protein and calorie totals to adjust.")
+        if confirmed:
+            d["confirmed_totals"] = {}
+            for nutrient, value in confirmed.items():
+                value = number(
+                    value, "Confirmed " + nutrient, 0, 500 if nutrient == "protein" else 10000
+                )
+                if d.get(nutrient) != value:
+                    raise ValueError("The meal total must match your confirmed value.")
+                d["confirmed_totals"][nutrient] = value
         if raw.get("items") is not None:
             items = raw["items"]
             if not isinstance(items, list) or not 1 <= len(items) <= 50:
@@ -257,15 +269,19 @@ def validate(kind, raw):
                     )
             total = sum(item["protein"] for item in d["items"])
             precision = max(0, -Decimal(str(d["protein"])).normalize().as_tuple().exponent)
-            if abs(total - d["protein"]) > 0.05 and round(total, precision) != d["protein"]:
+            if (
+                "protein" not in confirmed
+                and abs(total - d["protein"]) > 0.05
+                and round(total, precision) != d["protein"]
+            ):
                 raise ValueError("Meal item protein estimates do not add up to the total.")
             if "calories" in d and all("calories" in item for item in d["items"]):
                 total_calories = sum(item["calories"] for item in d["items"])
-                if abs(total_calories - d["calories"]) > 1:
+                if "calories" not in confirmed and abs(total_calories - d["calories"]) > 1:
                     raise ValueError("Meal item calorie estimates do not add up to the total.")
         for key in ("low", "high"):
-            if raw.get(key) is not None:
-                d[key] = number(raw[key], key + " protein estimate", 0, 500)
+            if raw.get(key) not in (None, ""):
+                d[key] = round(number(raw[key], key + " protein estimate", 0, 500), 2)
         if "low" in d and "high" in d and not d["low"] <= d["protein"] <= d["high"]:
             raise ValueError("Protein estimate must be inside the stated range.")
     elif kind in ("supplement", "creatine"):

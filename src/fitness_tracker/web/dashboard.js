@@ -18,15 +18,15 @@
       ? "future"
       : !logged
         ? "unlogged"
-        : ratio >= 0.95
+        : ratio >= 0.9
           ? "met"
           : ratio >= 0.8
             ? "near"
-            : ratio >= 0.65
+            : ratio >= 0.7
               ? "partial"
-              : ratio >= 0.5
+              : ratio >= 0.6
                 ? "mid"
-                : ratio >= 0.25
+                : ratio >= 0.5
                   ? "low"
                   : "critical";
   }

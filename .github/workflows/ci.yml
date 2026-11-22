@@ -35,6 +35,7 @@ jobs:
       - run: node tests/test_goals.cjs
       - run: node tests/test_voice_input.cjs
       - run: node tests/test_chat_submit.cjs
+      - run: node tests/test_chat_dates.cjs
       - run: node tests/test_chat_edits.cjs
       - run: node tests/test_coach_streaming.cjs
       - run: node tests/test_supplement_units.cjs

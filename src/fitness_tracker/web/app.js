@@ -664,7 +664,7 @@ function homeWorkoutJournal(entries) {
 }
 function dailyJournal() {
   const d = dayEntries();
-  return `<section class="card daily-journal" aria-label="Daily workout and nutrition journal"><div class="card-head journal-heading"><div><h2>${esc(sessionTitle(journalDate))}</h2></div><div class="journal-tools"><div class="actions journal-date-controls">${button("←", "journal-prev", "secondary", 'aria-label="Previous journal day"')}<label class="journal-date-label" for="journal-date">Journal date<input id="journal-date" type="date" min="1900-01-01" max="2050-12-31" required value="${journalDate}" aria-label="Journal date"></label>${button("→", "journal-next", "secondary", 'aria-label="Next journal day"')}${button("Today", "journal-today", "soft")}</div>${button(icon("coach") + " Log using AI", "ai-log-chooser")}</div></div><div class="grid equal"><div class="journal-panel"><div class="card-head"><div><h3>Gym strength training</h3><p>${d.workouts.length} session${d.workouts.length === 1 ? "" : "s"} · ${d.workouts.reduce((n, e) => n + e.exercises.reduce((s, x) => s + x.sets.length, 0), 0)} sets</p></div><div class="actions">${button(icon("plus") + (d.workouts.length ? " Edit strength" : " Log strength"), d.workouts.length ? "edit-entry" : "new-workout", "primary", d.workouts.length ? `data-id="${d.workouts[0].id}"` : "")}</div></div>${dayPlan()}${d.workouts.length ? d.workouts.map(dayWorkout).join("") : empty("Make room for movement", "Your strength training for this day will appear here.")}${verificationFooter("workout")}${cardioJournal(d.cardio)}${homeWorkoutJournal(d.homeWorkouts)}</div><div class="journal-side"><div class="journal-panel journal-food"><div class="card-head"><div><h3>Food & nutrition</h3><p>${n(d.protein)} g protein · ${d.missingCalories === d.meals.length && d.meals.length ? "Calories unknown" : `${n(d.calories)} kcal`}${d.missingCalories ? ` · ${d.missingCalories} meal(s) missing calories` : ""}</p></div><div class="actions">${button(icon("plus") + " Log food", "new-meal")}</div></div>${d.meals.length ? d.meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${activeAiPreview?.entries.some((entry) => entry.id === e.id) ? "AI preview · awaiting approval" : e.source === "ai" ? "Approved AI estimate" : "Manually logged"}</p></div><strong class="meal-nutrients">${n(e.protein)} <small class="muted">g protein</small><br><span>${e.calories == null ? "Calories unknown" : `${n(e.calories)} kcal`}</span></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled this day?", "Add food here without leaving your workout journal.")}${verificationFooter("meal")}</div><section class="journal-panel journal-creatine" aria-label="Creatine tracking"><div class="card-head"><div><h3>Creatine</h3><p>${n(d.creatine)} g logged</p></div>${button(icon("plus") + " Log creatine", "new-creatine")}</div>${d.creatineEntries.length ? d.creatineEntries.map((e) => `<div class="list-row"><span class="row-icon">${icon("drop")}</span><div class="row-main">${n(e.amount)} g${e.notes ? ` · ${esc(e.notes)}` : ""}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No creatine logged for this day.</p>'}${verificationFooter("creatine")}</section><section class="journal-panel journal-supplements" aria-label="Supplement tracking"><div class="card-head"><h3>Supplements</h3><div class="actions">${button(icon("plus") + " Log supplement", "new-supplement")}</div></div>${d.supplements.length ? d.supplements.map((e) => `<div class="list-row"><div class="row-main">${esc(e.name)} · ${n(e.amount)} ${esc(e.unit)}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No supplements logged for this day.</p>'}${verificationFooter("supplement")}</section>${sleepJournal()}${
+  return `<section class="card daily-journal" aria-label="Daily workout and nutrition journal"><div class="card-head journal-heading"><div><h2>${esc(sessionTitle(journalDate))}</h2></div><div class="journal-tools"><div class="actions journal-date-controls">${button("←", "journal-prev", "secondary", 'aria-label="Previous journal day"')}<label class="journal-date-label" for="journal-date">Journal date<input id="journal-date" type="date" min="1900-01-01" max="2050-12-31" required value="${journalDate}" aria-label="Journal date"></label>${button("→", "journal-next", "secondary", 'aria-label="Next journal day"')}${button("Today", "journal-today", "soft")}</div>${button(icon("coach") + " Log using AI", "ai-log-chooser")}</div></div><div class="grid equal"><div class="journal-panel"><div class="card-head"><div><h3>Gym strength training</h3><p>${d.workouts.length} session${d.workouts.length === 1 ? "" : "s"} · ${d.workouts.reduce((n, e) => n + e.exercises.reduce((s, x) => s + x.sets.length, 0), 0)} sets</p></div><div class="actions">${button(icon("plus") + (d.workouts.length ? " Edit strength" : " Log strength"), d.workouts.length ? "edit-entry" : "new-workout", "primary", d.workouts.length ? `data-id="${d.workouts[0].id}"` : "")}</div></div>${dayPlan()}${d.workouts.length ? d.workouts.map(dayWorkout).join("") : empty("Make room for movement", "Your strength training for this day will appear here.")}${verificationFooter("workout")}${cardioJournal(d.cardio)}${homeWorkoutJournal(d.homeWorkouts)}</div><div class="journal-side"><div class="journal-panel journal-food"><div class="card-head"><div><h3>Food & nutrition</h3><p>${n(d.protein)} g protein · ${d.missingCalories === d.meals.length && d.meals.length ? "Calories unknown" : `${n(d.calories)} kcal`}${d.missingCalories ? ` · ${d.missingCalories} meal(s) missing calories` : ""}</p></div><div class="actions">${button(icon("plus") + " Log food", "new-meal")}</div></div>${d.meals.length ? d.meals.map((e) => `<div class="list-row"><span class="row-icon">${icon("nutrition")}</span><div class="row-main"><h3>${esc(e.description)}</h3><p>${activeAiPreview?.entries.some((entry) => entry.id === e.id) ? "AI preview · awaiting approval" : e.confirmed_totals ? "User-adjusted AI estimate" : e.source === "ai" ? "Approved AI estimate" : "Manually logged"}</p></div><strong class="meal-nutrients">${n(e.protein)} <small class="muted">g protein</small><br><span>${e.calories == null ? "Calories unknown" : `${n(e.calories)} kcal`}</span></strong><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : empty("What fueled this day?", "Add food here without leaving your workout journal.")}${verificationFooter("meal")}</div><section class="journal-panel journal-creatine" aria-label="Creatine tracking"><div class="card-head"><div><h3>Creatine</h3><p>${n(d.creatine)} g logged</p></div>${button(icon("plus") + " Log creatine", "new-creatine")}</div>${d.creatineEntries.length ? d.creatineEntries.map((e) => `<div class="list-row"><span class="row-icon">${icon("drop")}</span><div class="row-main">${n(e.amount)} g${e.notes ? ` · ${esc(e.notes)}` : ""}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No creatine logged for this day.</p>'}${verificationFooter("creatine")}</section><section class="journal-panel journal-supplements" aria-label="Supplement tracking"><div class="card-head"><h3>Supplements</h3><div class="actions">${button(icon("plus") + " Log supplement", "new-supplement")}</div></div>${d.supplements.length ? d.supplements.map((e) => `<div class="list-row"><div class="row-main">${esc(e.name)} · ${n(e.amount)} ${esc(e.unit)}</div><button class="link" data-action="edit-entry" data-id="${e.id}">Edit</button></div>`).join("") : '<p class="small muted">No supplements logged for this day.</p>'}${verificationFooter("supplement")}</section>${sleepJournal()}${
     activeAiPreview?.entries.some(
       (e) => e.kind === "body" && e.date === journalDate,
     )
@@ -728,7 +728,7 @@ function activityCalendarInner() {
     )
     .join(
       "",
-    )}</select></div><div class="activity-month-controls">${button("←", "activity-prev", "secondary", 'aria-label="Previous activity month"')}<input id="activity-month" aria-label="Activity month" type="month" min="1900-01" max="2050-12" required value="${month}">${button("→", "activity-next", "secondary", 'aria-label="Next activity month"')}</div><div class="activity-weekdays">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Weekly score"].map((d) => `<span>${d}</span>`).join("")}</div><div class="activity-days">${data.weeks.map((w) => w.days.map((d) => activityDayHtml(d, label)).join("") + weeklyScoreHtml(w)).join("")}</div><div class="activity-legend">${["supplements", "cardio"].includes(dashboardMetric) ? '<span><i class="building"></i>Weekly progress</span><span><i class="met"></i>Weekly goal reached</span>' : '<span><i class="unlogged"></i>No log / rest</span><span><i class="critical"></i>Below 25%</span><span><i class="low"></i>25–49%</span><span><i class="mid"></i>50–64%</span><span><i class="partial"></i>65–79%</span><span><i class="near"></i>80–94%</span><span><i class="met"></i>95%+</span>'}</div><p class="dashboard-note">${data.loggedDays} ${label.toLowerCase()} ${dashboardMetric === "workout" ? "" : "days "}logged this month. Select a day to open Track.${dashboardMetric === "cardio" ? " Days show cumulative weekly cardio credit. High-intensity minutes count twice; weeks turn green at 100%." : dashboardMetric === "supplements" ? " Days show cumulative weekly target completion. Weeks turn green at 90%." : dashboardMetric !== "workout" ? " Weekly score uses all seven days; missing and future days count as zero." : " Weekly score compares gym days with your weekly target."} Weeks run Monday–Sunday, including days in adjacent months.</p>`;
+    )}</select></div><div class="activity-month-controls">${button("←", "activity-prev", "secondary", 'aria-label="Previous activity month"')}<input id="activity-month" aria-label="Activity month" type="month" min="1900-01" max="2050-12" required value="${month}">${button("→", "activity-next", "secondary", 'aria-label="Next activity month"')}</div><div class="activity-weekdays">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Weekly score"].map((d) => `<span>${d}</span>`).join("")}</div><div class="activity-days">${data.weeks.map((w) => w.days.map((d) => activityDayHtml(d, label)).join("") + weeklyScoreHtml(w)).join("")}</div><div class="activity-legend">${["supplements", "cardio"].includes(dashboardMetric) ? '<span><i class="building"></i>Weekly progress</span><span><i class="met"></i>Weekly goal reached</span>' : '<span><i class="unlogged"></i>No log / rest</span><span><i class="critical"></i>Below 50%</span><span><i class="low"></i>50–59%</span><span><i class="mid"></i>60–69%</span><span><i class="partial"></i>70–79%</span><span><i class="near"></i>80–89%</span><span><i class="met"></i>90%+</span>'}</div><p class="dashboard-note">${data.loggedDays} ${label.toLowerCase()} ${dashboardMetric === "workout" ? "" : "days "}logged this month. Select a day to open Track.${dashboardMetric === "cardio" ? " Days show cumulative weekly cardio credit. High-intensity minutes count twice; weeks turn green at 100%." : dashboardMetric === "supplements" ? " Days show cumulative weekly target completion. Weeks turn green at 90%." : dashboardMetric !== "workout" ? " Weekly score uses all seven days; missing and future days count as zero." : " Weekly score compares gym days with your weekly target."} Weeks run Monday–Sunday, including days in adjacent months.</p>`;
 }
 function updateActivityCalendar() {
   $("#dashboard-activity").innerHTML = activityCalendarInner();
@@ -1197,7 +1197,15 @@ function papersHtml(papers) {
 function draftHtml(d, inChat = false) {
   const entries = d.kind === "batch" ? d.data.entries : [{ data: d.data }];
   const incomplete = entries.some(item => item.data.notes?.includes("Needs clarification (not included"));
-  return `<div class="draft-card ${inChat ? "chat-preview-actions" : ""}"><span class="preview-status">${d.kind === "batch" ? d.data.entries.length + " entries" : esc(d.kind === "meal" ? "Meal" : d.kind)} · not saved yet</span><div class="actions">${inChat ? button(d.kind === "batch" ? "Approve & save all" : "Approve & save", "approve-chat-draft", "primary", `data-id="${d.id}" ${incomplete || chatEdit ? 'disabled title="Finish editing and resolve any questions before approval"' : ""}`) + button("Suggest changes", "change-preview", "soft", `data-id="${d.id}"`) : ""}${button(inChat ? "View in Track" : "Review in Track", "preview-ai-draft", "soft", `data-id="${d.id}"`)}${button("Revert", "dismiss-draft", "secondary", `data-id="${d.id}"`)}</div></div>`;
+  return `<div class="draft-card ${inChat ? "chat-preview-actions" : ""}"><span class="preview-status">${d.kind === "batch" ? d.data.entries.length + " entries" : esc(d.kind === "meal" ? "Meal" : d.kind)} · not saved yet</span><div class="actions">${inChat ? button(d.kind === "batch" ? "Approve & save all" : "Approve & save", "approve-chat-draft", "primary", `data-id="${d.id}" ${incomplete || chatEdit ? 'disabled title="Finish editing and resolve any questions before approval"' : ""}`) + button("Suggest changes", "change-preview", "soft", `data-id="${d.id}"`) + ((d.kind === "meal" || entries.some(item => item.kind === "meal")) ? button("Adjust totals", "adjust-meal-totals", "soft", `data-id="${d.id}" ${incomplete || chatEdit ? "disabled" : ""}`) : "") : ""}${button(inChat ? "View in Track" : "Review in Track", "preview-ai-draft", "soft", `data-id="${d.id}"`)}${button("Revert", "dismiss-draft", "secondary", `data-id="${d.id}"`)}</div></div>`;
+}
+function adjustMealTotals(draftId) {
+  const draft = state.drafts?.find(item => item.id === draftId);
+  if (!draft) return toast("That preview is no longer pending.");
+  const meals = (draft.kind === "batch" ? draft.data.entries : [{ kind: draft.kind, data: draft.data }]).filter(item => item.kind === "meal");
+  if (!meals.length) return;
+  modal("Adjust meal totals", "Enter the totals you want to save, then approve. The original food breakdown remains labelled as AI estimates.",
+    `<form id="meal-totals-form" data-draft-id="${esc(draftId)}">${meals.map((item, index) => `<fieldset class="meal-total-fields" data-item-id="${esc(item.item_id || "")}"><legend>${esc(item.data.description)} · ${esc(item.data.date)}</legend><div class="form-grid"><div class="field"><label for="meal-total-protein-${index}">Protein · g</label><input id="meal-total-protein-${index}" name="protein" type="number" min="0" max="500" step="0.01" required value="${esc(item.data.protein)}"></div><div class="field"><label for="meal-total-calories-${index}">Calories · kcal</label><input id="meal-total-calories-${index}" name="calories" type="number" min="0" max="10000" step="0.01" value="${esc(item.data.calories ?? "")}"></div></div><div class="form-grid"><div class="field"><label for="meal-total-low-${index}">Protein range · low g (optional)</label><input id="meal-total-low-${index}" name="low" type="number" min="0" max="500" step="0.01" value="${item.data.low == null ? "" : Math.round(item.data.low * 100) / 100}"></div><div class="field"><label for="meal-total-high-${index}">Protein range · high g (optional)</label><input id="meal-total-high-${index}" name="high" type="number" min="0" max="500" step="0.01" value="${item.data.high == null ? "" : Math.round(item.data.high * 100) / 100}"></div></div></fieldset>`).join("")}<p class="small muted">Leave calories blank to keep the current estimate. Nothing is saved until you approve.${draft.kind === "batch" ? " Approval saves all entries in this preview." : ""}</p><div id="form-error" class="error" role="alert"></div><div class="actions"><button class="btn primary" type="submit">${draft.kind === "batch" ? "Approve & save all entries" : "Approve & save"}</button>${button("Cancel", "close-modal", "secondary")}</div></form>`);
 }
 function agentDetails(message) {
   const a = message.agent;
@@ -1656,8 +1664,11 @@ function updateChatVoiceControls() {
   const submit = $("#chat-form [type=submit]");
   if (submit) submit.disabled = chatIsBusy() || coachModelBusy || voiceInput.isBusy();
 }
+function coachDateControl() {
+  return `<div class="coach-log-date"><label for="coach-log-date">Logging date<input id="coach-log-date" type="date" min="1900-01-01" max="2050-12-31" value="${journalDate}" aria-describedby="coach-log-date-hint"></label><p id="coach-log-date-hint">Entries will use <strong>${esc(dateLabel(journalDate, { day: "numeric", month: "short", year: "numeric" }))}</strong>. Change this date or state another date in your message. Every entry needs a date before approval.</p></div>`;
+}
 function coach() {
-  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div><div id="chat-review-hint" class="chat-review-hint" hidden></div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="1" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
+  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div><div id="chat-review-hint" class="chat-review-hint" hidden></div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose">${coachDateControl()}<label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="1" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
 }
 function goalProgress(key, reference = journalDate) {
   return GoalTracking.progress(
@@ -2022,9 +2033,7 @@ function simpleForm(kind, entry = {}, draft = null) {
         'min="0" max="10000" step="any"',
       ) +
       (entry.id && entry.calories == null ? '<p class="small muted">Calories were not recorded for this older meal. Add an estimate when available; leaving it blank keeps it unknown.</p>' : "") +
-      (entry.low !== undefined
-        ? `<div class="form-grid">${field("Estimate range · low g", "low", entry.low, "number", 'min="0" max="500" step="0.1"')}${field("Estimate range · high g", "high", entry.high, "number", 'min="0" max="500" step="0.1"')}</div>`
-        : "");
+      `<div class="form-grid">${field("Protein range · low g (optional)", "low", entry.low == null ? "" : Math.round(entry.low * 100) / 100, "number", 'min="0" max="500" step="0.01"')}${field("Protein range · high g (optional)", "high", entry.high == null ? "" : Math.round(entry.high * 100) / 100, "number", 'min="0" max="500" step="0.01"')}</div><p class="small muted">Optionally record your estimated range. Enter both ends and keep the protein total inside the range.</p>`;
   if (kind === "cardio") {
     body += `<div class="field"><label for="entry-activity">Sport or aerobic activity</label><select id="entry-activity" name="activity" required><option value="">Choose an activity</option>${Object.entries(state.cardio_activities || {}).map(([group, names]) => `<optgroup label="${esc(group)}">${names.map(name => `<option value="${esc(name)}" ${entry.activity === name ? "selected" : ""}>${esc(name)}</option>`).join("")}</optgroup>`).join("")}</select></div>` +
       field("Time engaged · minutes", "minutes", entry.minutes ?? "", "number", 'required min="0.1" max="1440" step="any"') +
@@ -2305,7 +2314,27 @@ function prepareCoachMessage(message) {
   }
 }
 
-async function sendChat(event, approvalId = null, retryRequestId = null, editMessageId = null) {
+function chatMessageDate(message, reference) {
+  const iso = message.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (iso) return iso[0];
+  const numeric = message.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (numeric) return `${numeric[3]}-${numeric[2].padStart(2, "0")}-${numeric[1].padStart(2, "0")}`;
+  const month = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+  const dayFirst = message.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${month})\\b(?:[, ]+(\\d{4}))?`, "i"));
+  const monthFirst = message.match(new RegExp(`\\b(${month})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?:[, ]+(\\d{4}))?`, "i"));
+  if (!dayFirst && !monthFirst) {
+    if (/\byesterday\b/i.test(message)) return addDays(state.today || reference, -1);
+    if (/\btoday\b/i.test(message)) return state.today || reference;
+    return null;
+  }
+  const match = dayFirst || monthFirst;
+  const day = dayFirst ? match[1] : match[2];
+  const name = (dayFirst ? match[2] : match[1]).slice(0, 3).toLowerCase();
+  const number = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(name) + 1;
+  return `${match[3] || reference.slice(0, 4)}-${String(number).padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+async function sendChat(event, approvalId = null, retryRequestId = null, editMessageId = null, mealTotals = null) {
   event.preventDefault();
   if (chatIsBusy()) return;
   const editing = editMessageId && chatEdit;
@@ -2333,6 +2362,20 @@ async function sendChat(event, approvalId = null, retryRequestId = null, editMes
   error.textContent = "";
   if (!message) {
     error.textContent = "Enter a message for your coach.";
+    return;
+  }
+  const dateInput = $("#coach-log-date");
+  const selectedDate = editing ? editing.date : dateInput ? dateInput.value : journalDate;
+  const writtenDate = chatMessageDate(message, selectedDate || state.today || journalDate);
+  const loggingRequested = chatLoggingKind || /\b(?:log|record|save|plan|schedule)\b|\bprepare\b.*\b(?:preview|entry|draft)\b/i.test(message);
+  if (!approvalId && !chatRevisionId && loggingRequested && !selectedDate && !writtenDate) {
+    error.textContent = "Which date should I use? Choose a logging date above, or include a date, today or yesterday in your message.";
+    dateInput?.focus();
+    return;
+  }
+  if (!approvalId && !chatRevisionId && dateInput && !writtenDate && !dateInput.checkValidity()) {
+    error.textContent = "Choose a valid logging date from 1900 through 2050.";
+    dateInput.focus();
     return;
   }
   const request_id = retryRequestId || crypto.randomUUID();
@@ -2370,12 +2413,13 @@ async function sendChat(event, approvalId = null, retryRequestId = null, editMes
       message,
       stream: true,
       request_id,
-      date: editing ? editing.date : journalDate,
+      date: writtenDate || selectedDate || null,
       research,
       logging_kind,
       revise_draft_id,
       ...(editMessageId ? { edit_message_id: editMessageId } : {}),
       ...(approvalId ? { approve_draft_id: approvalId } : {}),
+      ...(approvalId && mealTotals ? { meal_totals: mealTotals } : {}),
     });
     await refresh(false);
     optimisticChat = null;
@@ -2388,6 +2432,7 @@ async function sendChat(event, approvalId = null, retryRequestId = null, editMes
       chatLoggingKind = null;
       chatRevisionId = null;
     }
+    return reply;
   } catch (failure) {
     if (approvalId) toast(failure.message);
     try {
@@ -2877,6 +2922,9 @@ async function action(name, el) {
     case "preview-ai-draft":
       await showAiPreview(id);
       break;
+    case "adjust-meal-totals":
+      if (!chatEdit && !chatIsBusy()) adjustMealTotals(id);
+      break;
     case "approve-chat-draft":
       if (chatEdit) break;
       await sendChat({ preventDefault() {} }, id);
@@ -3284,6 +3332,15 @@ document.addEventListener("change", (event) => {
     if (workoutForm.date)
       $("#modal h2").textContent = sessionTitle(workoutForm.date);
   }
+  if (el.id === "coach-log-date") {
+    const hint = $("#coach-log-date-hint");
+    if (el.value && el.checkValidity()) {
+      journalDate = el.value;
+      hint.textContent = `Entries will use ${dateLabel(el.value, { day: "numeric", month: "short", year: "numeric" })}. Change this date or state another date in your message. Every entry needs a date before approval.`;
+    } else {
+      hint.textContent = "Choose a logging date, or include one in your message. Ordinary coaching questions do not need a date.";
+    }
+  }
   if (el.id === "nutrition-date" || el.id === "journal-date") {
     if (!el.checkValidity()) {
       el.value = journalDate;
@@ -3321,7 +3378,22 @@ document.addEventListener("submit", async (event) => {
   const submit = form.querySelector("[type=submit]");
   if (submit) submit.disabled = true;
   try {
-    if (form.id === "coach-consent-form") {
+    if (form.id === "meal-totals-form") {
+      const totals = [...form.querySelectorAll(".meal-total-fields")].map(fields => {
+        const calories = fields.querySelector('[name="calories"]').value;
+        return {
+          ...(fields.dataset.itemId ? { item_id: fields.dataset.itemId } : {}),
+          protein: Number(fields.querySelector('[name="protein"]').value),
+          low: fields.querySelector('[name="low"]').value === "" ? null : Number(fields.querySelector('[name="low"]').value),
+          high: fields.querySelector('[name="high"]').value === "" ? null : Number(fields.querySelector('[name="high"]').value),
+          ...(calories !== "" ? { calories: Number(calories) } : {}),
+        };
+      });
+      const reply = await sendChat({ preventDefault() {} }, form.dataset.draftId, null, null, totals);
+      if (!reply?.approved) throw Error($("#chat-error")?.textContent || "Approval could not be confirmed. Review the preview before trying again.");
+      await closeModal();
+      toast("Your adjusted meal totals were saved.");
+    } else if (form.id === "coach-consent-form") {
       if (!form.elements.agreement.checked)
         throw Error("Tick the agreement to enable the coach.");
       await saveCoachAgreement(true);
@@ -3350,6 +3422,8 @@ document.addEventListener("submit", async (event) => {
         kind: form.dataset.kind,
         source: form.dataset.source,
       };
+      if (data.kind === "meal" && Boolean(data.low) !== Boolean(data.high))
+        throw Error("Enter both ends of the protein range, or leave both blank.");
       if (data.kind === "supplement" && data.name === "__new__")
         throw Error("Save your new supplement name to the list first.");
       if (form.dataset.id) data.id = form.dataset.id;

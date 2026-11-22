@@ -38,8 +38,8 @@ const entries = [
 let data = d.calendar(entries, profile, "2026-11", "protein", "2026-11-12");
 assert.equal(data.days.length, 30);
 assert.equal(data.offset, 6, "Monday-first alignment");
-assert.equal(data.days[8].tone, "met", "98% is dark green");
-assert.equal(data.days[9].tone, "near", "80% is muted teal");
+assert.equal(data.days[8].tone, "met", "98% is brightest green");
+assert.equal(data.days[9].tone, "near", "80% is medium green");
 assert.equal(data.days[10].tone, "unlogged");
 assert.equal(data.days[14].tone, "future");
 assert.equal(data.days[14].ratio, 0);
@@ -84,20 +84,12 @@ console.log(
 );
 
 for (const [ratio, expected] of [
-  [0, "critical"],
-  [0.2499, "critical"],
-  [0.25, "low"],
-  [0.4999, "low"],
-  [0.5, "mid"],
-  [0.6499, "mid"],
-  [0.65, "partial"],
-  [0.79, "partial"],
-  [0.8, "near"],
-  [0.86, "near"],
-  [0.94, "near"],
-  [0.95, "met"],
-  [1, "met"],
-  [1.12, "met"],
+  [0, "critical"], [0.2499, "critical"], [0.25, "critical"], [0.4999, "critical"],
+  [0.5, "low"], [0.5999, "low"],
+  [0.6, "mid"], [0.6999, "mid"],
+  [0.7, "partial"], [0.7999, "partial"],
+  [0.8, "near"], [0.8999, "near"],
+  [0.9, "met"], [0.95, "met"], [1, "met"], [1.12, "met"],
 ]) {
   assert.equal(d.tone(ratio, true, false), expected);
 }
@@ -174,7 +166,7 @@ assert.ok(
   Math.abs(week.percent - 224 / 7) < 1e-9,
   "weekly intake always divides by seven, with uncapped daily intake",
 );
-assert.equal(week.tone, "low");
+assert.equal(week.tone, "critical");
 assert.match(week.note, /all 7/);
 week = weekFor(
   d.calendar(current, profile, "2026-11", "creatine", "2026-11-11"),

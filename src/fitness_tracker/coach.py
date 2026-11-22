@@ -455,6 +455,7 @@ class Coach:
         approve_draft_id=None,
         progress=None,
         edit_message_id=None,
+        meal_totals=None,
     ):
         if consent is not True:
             raise ValueError("Review and accept local coaching before starting the chat.")
@@ -475,6 +476,8 @@ class Coach:
             raise ValueError("Choose a supported AI logging type.")
         if type(research_mode) is not bool:
             raise ValueError("Choose whether to research this message.")
+        if meal_totals is not None and not approve_draft_id:
+            raise ValueError("Review and approve the pending meal when adjusting totals.")
         request_id = request_id or uuid.uuid4().hex
         if not isinstance(request_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", request_id):
             raise ValueError("Invalid chat request. Please try sending again.")
@@ -670,7 +673,9 @@ class Coach:
                     None,
                 )
                 if answer_index and messages[answer_index - 1]["role"] == "user":
-                    receipt = approve_from_chat(self.store, message, history, approve_draft_id)
+                    receipt = approve_from_chat(
+                        self.store, message, history, approve_draft_id, meal_totals
+                    )
                     if receipt and receipt.get("approved"):
                         original = messages[answer_index - 1]
                         response = {
@@ -700,7 +705,9 @@ class Coach:
             else:
                 user_id = self.store.message("user", user_data)
             self.current_request = request_id
-            app_action = approve_from_chat(self.store, message, history, approve_draft_id)
+            app_action = approve_from_chat(
+                self.store, message, history, approve_draft_id, meal_totals
+            )
             if app_action:
                 response = {
                     **app_action,
