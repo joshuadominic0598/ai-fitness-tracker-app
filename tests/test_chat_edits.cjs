@@ -12,7 +12,7 @@ const source = fs.readFileSync(require.resolve("../src/fitness_tracker/web/app.j
       { id: 2, role: "assistant", text: "Original estimate", action: "meal", draft, request_id: "original-request" },
     ] },
     chatEdit: null, chatBusy: false, coachModelBusy: false, optimisticChat: null,
-    chatRevisionId: null, chatLoggingKind: null, chatResearchMode: false,
+    chatRevisionId: null, chatLoggingKind: null, chatResearchMode: false, chatLogDate: null,
     chatComposerDraft: "", journalDate: "2026-11-21", location: { hash: "#coach" },
     voiceInput: { cancel() {}, isBusy: () => false },
     esc: value => String(value).replaceAll("<", "&lt;"),

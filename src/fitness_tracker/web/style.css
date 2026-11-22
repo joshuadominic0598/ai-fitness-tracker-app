@@ -5501,17 +5501,8 @@ dialog.monday-datepicker::backdrop {
   .cardio-week-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.coach-log-date { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #9374b342; border-radius: 12px; background: #9374b30c; }
-.coach-log-date label { flex: 0 0 165px; margin: 0; font-size: 12px; }
-.coach-log-date input { margin-top: 4px; width: 100%; min-width: 0; }
-.coach-log-date p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
-.coach-log-date strong { color: var(--ink); }
 .meal-total-fields { min-width: 0; margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
 .meal-total-fields legend { max-width: 100%; padding: 0 6px; overflow-wrap: anywhere; }
-@media (max-width: 600px) {
-  .coach-log-date { flex-direction: column; align-items: stretch; gap: 8px; }
-  .coach-log-date label { flex-basis: auto; }
-}
 
 .journal-home,
 .journal-cardio {

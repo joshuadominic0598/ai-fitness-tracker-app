@@ -23,6 +23,7 @@ const code = source.slice(
     chatResearchMode: false,
     chatLoggingKind: null,
     chatRevisionId: null,
+    chatLogDate: null,
     voiceInput: { isBusy: () => false, cancel: () => {} },
     chatBusy: false,
     coachModelBusy: false,
@@ -41,7 +42,7 @@ const code = source.slice(
       calls++;
       assert.ok(prevented);
       assert.equal(path, "chat");
-      assert.equal(data.date, "2026-11-09");
+      assert.equal(data.date, null, "ordinary questions do not inherit the Track date");
       assert.equal(data.request_id, "test-request-1234");
       assert.equal(
         data.research,
@@ -70,7 +71,8 @@ const code = source.slice(
   );
   const starters = vm.runInContext("coachStarters", ctx);
   assert.equal(starters.length, 5);
-  assert.equal((ctx.coachPromptCards().match(/data-prompt=/g) || []).length, 5);
+  assert.equal((ctx.coachPromptCards().match(/data-prompt=/g) || []).length, 4);
+  assert.match(ctx.coachPromptCards(), /data-action="start-coach-log" data-kind="meal"/);
   input.focus = () => {};
   for (const starter of starters) {
     ctx.prepareCoachMessage(starter.prompt);

@@ -562,10 +562,30 @@ function openAiLogChooser() {
     `<div class="ai-log-choices">${choices.map(([kind, title, hint, symbol]) => `<button type="button" class="coach-starter ai-log-choice" data-action="ai-log" data-kind="${kind}">${icon(symbol)}<span><strong>${title}</strong><small>${hint}</small></span>${icon("arrow")}</button>`).join("")}</div>`,
   );
 }
-async function openAiLog(kind = "any", revisionId = "") {
+function openCoachLogDate(kind = "any", message = "") {
+  if (chatIsBusy()) return toast("Wait for the coach to finish before starting another log.");
+  const title = kind === "meal" ? "Which day is this food for?" : "Which day would you like to log?";
+  modal(title, "Choose the date first. Then add your details in chat; nothing is saved until you approve.",
+    `<form id="coach-log-date-form" data-kind="${esc(kind)}"><input type="hidden" name="message" value="${esc(message)}">${field("Logging date", "date", "", "date", 'required aria-describedby="coach-date-help"')}<div class="actions">${button("Today", "coach-log-day", "soft", 'data-offset="0"')}${button("Yesterday", "coach-log-day", "secondary", 'data-offset="-1"')}</div><p id="coach-date-help" class="small muted">Select a day or use Today / Yesterday, then continue to your message.</p><div id="form-error" class="error" role="alert"></div><div class="actions"><button class="btn primary" type="submit">Continue to message</button>${button("Cancel", "close-modal", "secondary")}</div></form>`);
+}
+async function confirmCoachLogDate(form) {
+  const input = form.elements.date;
+  if (!input.value || !input.checkValidity()) throw Error("Choose a valid date from 1900 through 2050.");
+  const day = input.value, message = form.elements.message.value;
+  const kind = form.dataset.kind || "any";
+  if (!message) return openAiLog(kind, "", day);
+  await closeModal();
+  prepareCoachMessage(message);
+  journalDate = day;
+  chatLogDate = day;
+  chatLoggingKind = kind;
+  $("#chat-input")?.focus();
+}
+async function openAiLog(kind = "any", revisionId = "", selectedDay = null) {
   if (revisionId && await editChatPreview(revisionId)) return;
   const dateInput = $("#entry-date");
   if (dateInput?.value) journalDate = dateInput.value;
+  if (selectedDay) journalDate = selectedDay;
   if (revisionId) {
     const draft = state.drafts?.find((item) => item.id === revisionId);
     const data =
@@ -590,6 +610,7 @@ async function openAiLog(kind = "any", revisionId = "") {
       : prompts[kind] || prompts.any,
   );
   chatLoggingKind = kind;
+  chatLogDate = journalDate;
   chatRevisionId = revisionId || null;
   location.hash = "coach";
   render();
@@ -1281,6 +1302,7 @@ function startChatEdit(exchange) {
     chatRevisionId = exchange.draft.id;
     chatLoggingKind = exchange.kind;
     journalDate = exchange.date;
+    chatLogDate = exchange.date;
     if (location.hash !== "#coach") {
       location.hash = "coach";
       render();
@@ -1301,7 +1323,8 @@ function quotaSummary(provider, connections = state.connections) {
   return `Qwen runs locally · ${n(connections.ollama_context_tokens || 8192)} context tokens`;
 }
 let chatLoggingKind = null,
-  chatRevisionId = null;
+  chatRevisionId = null,
+  chatLogDate = null;
 let chatEdit = null;
 let chatStage = "Received. Understanding your request…";
 let chatResearchMode = false,
@@ -1615,13 +1638,13 @@ async function testCoachConnection(provider, status) {
 
 const coachStarters = [
   { title: "Log/Plan Workout", hint: "Choose a day · review before saving", icon: "workouts", prompt: "Help me log or plan my workout. " },
-  { title: "Food & intake", hint: "Estimate protein and calories or log your intake", icon: "nutrition", prompt: "Help me with food calories, protein or creatine. " },
+  { title: "Log food", hint: "Choose a date · estimate protein and calories", icon: "nutrition", kind: "meal", prompt: "Help me with food calories, protein or creatine. " },
   { title: "Supplements/Sleep Logging", hint: "Use your goals and preferred units", icon: "sleep", prompt: "Help me log supplements or sleep. " },
   { title: "Learn an exercise", hint: "Steps, cues, mistakes & a short video", icon: "exercises", prompt: "Help me learn this exercise with simple steps, form cues and common mistakes: " },
   { title: "Assess my progress", hint: "Workouts · intake & recovery", icon: "progress", prompt: "Assess my progress" },
 ];
 function coachPromptCards() {
-  return `<div class="coach-starters" role="group" aria-label="Start a conversation">${coachStarters.map((starter) => `<button type="button" class="coach-starter" data-prompt="${esc(starter.prompt)}">${icon(starter.icon)}<span><strong>${esc(starter.title)}</strong><small>${esc(starter.hint)}</small></span></button>`).join("")}</div>`;
+  return `<div class="coach-starters" role="group" aria-label="Start a conversation">${coachStarters.map((starter) => `<button type="button" class="coach-starter" ${starter.kind ? `data-action="start-coach-log" data-kind="${starter.kind}"` : `data-prompt="${esc(starter.prompt)}"`}>${icon(starter.icon)}<span><strong>${esc(starter.title)}</strong><small>${esc(starter.hint)}</small></span></button>`).join("")}</div>`;
 }
 const voiceInput = VoiceInput.create({
   transcribe: (data) => api("transcribe", data),
@@ -1664,11 +1687,8 @@ function updateChatVoiceControls() {
   const submit = $("#chat-form [type=submit]");
   if (submit) submit.disabled = chatIsBusy() || coachModelBusy || voiceInput.isBusy();
 }
-function coachDateControl() {
-  return `<div class="coach-log-date"><label for="coach-log-date">Logging date<input id="coach-log-date" type="date" min="1900-01-01" max="2050-12-31" value="${journalDate}" aria-describedby="coach-log-date-hint"></label><p id="coach-log-date-hint">Entries will use <strong>${esc(dateLabel(journalDate, { day: "numeric", month: "short", year: "numeric" }))}</strong>. Change this date or state another date in your message. Every entry needs a date before approval.</p></div>`;
-}
 function coach() {
-  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div><div id="chat-review-hint" class="chat-review-hint" hidden></div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose">${coachDateControl()}<label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="1" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
+  return `<div class="coach-layout"><div class="card chat-card"><div class="chat-title"><span class="row-icon">${icon("coach")}</span><div class="row-main"><h2>Your fitness coach</h2><p id="coach-active-model" class="small muted">${state.connections.provider ? "Using " + coachProviderLabel(state.connections.provider) + " · " + esc(state.connections[state.connections.provider + "_model"] || "Choose a model") : "Start Ollama to use your local Qwen coach"}</p></div><button type="button" class="btn secondary chat-new-button" data-action="new-chat" aria-label="Start a new chat" title="Start a new chat">${icon("refresh")}</button><details class="chat-options"><summary>Options ${icon("settings")}</summary><div class="chat-options-panel"><h3>Chat settings</h3>${coachModelControls()}<label class="checkbox-label chat-research-choice"><input id="coach-research" type="checkbox" ${chatResearchMode ? "checked" : ""}> Research this message with sources</label><p class="small muted">Off by default for quicker replies. Research uses extra calls and may take longer.</p><div class="chat-sharing-links">${button("Coaching skills", "coach-skills", "secondary")}<button type="button" class="link" data-action="preview-context">Preview shared data</button><button type="button" class="link" data-action="coach-sharing">Sharing permissions</button><button type="button" class="link" data-page="settings">Connections ↗</button></div></div></details></div>${chatConsentGate()}<div class="chat-thread" id="chat-thread" role="log" aria-label="Coach conversation" aria-live="polite" aria-relevant="additions text">${chatThreadHtml()}</div><div id="chat-review-hint" class="chat-review-hint" hidden></div>${state.coach_consent?.accepted ? `<form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">Message your coach</label><div class="chat-input-row"><textarea id="chat-input" rows="1" required maxlength="6000" placeholder="Message your coach…">${esc(chatComposerDraft)}</textarea><div class="chat-compose-actions"><span id="chat-voice-button">${chatVoiceButton()}</span><button class="btn" type="submit" aria-label="Send message" ${chatBusy ? "disabled" : ""}>${chatBusy ? "Generating…" : "Send " + icon("arrow")}</button></div></div><div id="chat-voice-controls">${chatVoiceControls()}</div><div class="chat-compose-hint"><span>Enter to send · Shift+Enter for a new line</span><span id="chat-mode-label">${chatResearchMode ? "Research on" : "Quick chat"}</span></div><div id="chat-error" class="error" role="alert"></div></form>` : ""}</div><aside class="card coach-tasks" aria-label="Coach tasks"><h3>How can I help?</h3><p class="small muted">Choose a task to get started.</p>${coachPromptCards()}</aside></div>`;
 }
 function goalProgress(key, reference = journalDate) {
   return GoalTracking.progress(
@@ -2303,6 +2323,7 @@ function prepareCoachMessage(message) {
   chatComposerDraft = message;
   chatLoggingKind = null;
   chatRevisionId = null;
+  chatLogDate = null;
   chatEdit = null;
   const options = $(".chat-options");
   if (options) options.open = false;
@@ -2364,20 +2385,19 @@ async function sendChat(event, approvalId = null, retryRequestId = null, editMes
     error.textContent = "Enter a message for your coach.";
     return;
   }
-  const dateInput = $("#coach-log-date");
-  const selectedDate = editing ? editing.date : dateInput ? dateInput.value : journalDate;
+  const selectedDate = editing ? editing.date : chatLogDate;
   const writtenDate = chatMessageDate(message, selectedDate || state.today || journalDate);
-  const loggingRequested = chatLoggingKind || /\b(?:log|record|save|plan|schedule)\b|\bprepare\b.*\b(?:preview|entry|draft)\b/i.test(message);
+  const loggingRequested = chatLoggingKind || (
+    !/\b(?:don't|do not|not yet|instead of)\b/i.test(message) && (
+      /^\s*(?:(?:ya|yeah|yes|ok|okay|please|sure)[,! .]+)*(?:(?:can|could|would) you\s+|help me\s+|i (?:want|would like) (?:you )?to\s+)?(?:log\b|add\b|record\b|save\b|plan\b|schedule\b|prepare\b.{0,35}\b(?:preview|entry|log|draft)\b)/i.test(message)
+      || /^\s*(?:i\s+)?(?:took|taken|slept|sleep\s+\d|nap\s*\d|night\s*\d)\b/i.test(message)
+    )
+  );
   if (!approvalId && !chatRevisionId && loggingRequested && !selectedDate && !writtenDate) {
-    error.textContent = "Which date should I use? Choose a logging date above, or include a date, today or yesterday in your message.";
-    dateInput?.focus();
+    openCoachLogDate(chatLoggingKind || "any", message);
     return;
   }
-  if (!approvalId && !chatRevisionId && dateInput && !writtenDate && !dateInput.checkValidity()) {
-    error.textContent = "Choose a valid logging date from 1900 through 2050.";
-    dateInput.focus();
-    return;
-  }
+  if (!approvalId && loggingRequested && writtenDate) chatLogDate = writtenDate;
   const request_id = retryRequestId || crypto.randomUUID();
   const logging_kind = editing ? editing.kind : chatLoggingKind,
     revise_draft_id = editing ? null : chatRevisionId;
@@ -2426,11 +2446,13 @@ async function sendChat(event, approvalId = null, retryRequestId = null, editMes
     if (reply.draft) {
       chatLoggingKind = null;
       chatRevisionId = null;
+      chatLogDate = null;
     } else if (reply.approved) {
       activeAiPreview = null;
       journalDate = reply.approved.date;
       chatLoggingKind = null;
       chatRevisionId = null;
+      chatLogDate = null;
     }
     return reply;
   } catch (failure) {
@@ -2514,6 +2536,7 @@ async function action(name, el) {
         chatComposerDraft = "";
         chatLoggingKind = null;
         chatRevisionId = null;
+        chatLogDate = null;
         chatEdit = null;
         chatResearchMode = false;
         await refreshChatSnapshot();
@@ -2576,6 +2599,7 @@ async function action(name, el) {
         chatResearchMode = message.research === true;
         chatLoggingKind = message.logging_kind || null;
         chatRevisionId = message.revise_draft_id || null;
+        chatLogDate = message.context_date || null;
         $("#chat-input").value = message.text;
         chatComposerDraft = message.text;
         resizeChatComposer();
@@ -2922,6 +2946,18 @@ async function action(name, el) {
     case "preview-ai-draft":
       await showAiPreview(id);
       break;
+    case "start-coach-log":
+      openCoachLogDate(el.dataset.kind || "any");
+      break;
+    case "coach-log-day": {
+      const input = $("#coach-log-date-form")?.elements.date;
+      if (input) {
+        input.value = addDays(state.today, Number(el.dataset.offset));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.focus();
+      }
+      break;
+    }
     case "adjust-meal-totals":
       if (!chatEdit && !chatIsBusy()) adjustMealTotals(id);
       break;
@@ -3332,15 +3368,6 @@ document.addEventListener("change", (event) => {
     if (workoutForm.date)
       $("#modal h2").textContent = sessionTitle(workoutForm.date);
   }
-  if (el.id === "coach-log-date") {
-    const hint = $("#coach-log-date-hint");
-    if (el.value && el.checkValidity()) {
-      journalDate = el.value;
-      hint.textContent = `Entries will use ${dateLabel(el.value, { day: "numeric", month: "short", year: "numeric" })}. Change this date or state another date in your message. Every entry needs a date before approval.`;
-    } else {
-      hint.textContent = "Choose a logging date, or include one in your message. Ordinary coaching questions do not need a date.";
-    }
-  }
   if (el.id === "nutrition-date" || el.id === "journal-date") {
     if (!el.checkValidity()) {
       el.value = journalDate;
@@ -3378,7 +3405,9 @@ document.addEventListener("submit", async (event) => {
   const submit = form.querySelector("[type=submit]");
   if (submit) submit.disabled = true;
   try {
-    if (form.id === "meal-totals-form") {
+    if (form.id === "coach-log-date-form") {
+      await confirmCoachLogDate(form);
+    } else if (form.id === "meal-totals-form") {
       const totals = [...form.querySelectorAll(".meal-total-fields")].map(fields => {
         const calories = fields.querySelector('[name="calories"]').value;
         return {
@@ -3410,6 +3439,7 @@ document.addEventListener("submit", async (event) => {
       chatLoggingKind = null;
       chatRevisionId = null;
       optimisticChat = null;
+      chatLogDate = null;
       prId = undefined;
       workoutForm = null;
       formDraft = null;

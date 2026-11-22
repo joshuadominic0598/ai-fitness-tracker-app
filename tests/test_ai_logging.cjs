@@ -67,6 +67,7 @@ const assert = require("node:assert/strict"),
   await flow.openAiLog("workout");
   assert.equal(flow.location.hash, "coach");
   assert.equal(flow.chatLoggingKind, "workout");
+  assert.equal(flow.chatLogDate, "2026-11-11");
   assert.match(prepared, /Log my workout for 2026-11-11/);
   assert.equal(rendered, 1);
   await flow.openAiLog("meal", "pending-id");
@@ -83,6 +84,9 @@ const assert = require("node:assert/strict"),
   assert.equal(flow.journalDate, "2026-11-09");
   assert.match(prepared, /2026-11-09/);
   assert.equal(flow.location.hash, "coach");
+  await flow.openAiLog("meal", "", "2026-11-08");
+  assert.equal(flow.chatLogDate, "2026-11-08");
+  assert.match(prepared, /Log my food for 2026-11-08/);
 
   const review = {
     GoalTracking: require("../src/fitness_tracker/web/goals.js"),
