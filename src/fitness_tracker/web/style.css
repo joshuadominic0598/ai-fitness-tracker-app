@@ -2766,15 +2766,15 @@ a {
 }
 .activity-day.met,
 .activity-legend .met {
-  background: #00d003;
-  border-color: #00d003;
-  color: #073821;
+  background: #155b36;
+  border-color: #155b36;
+  color: #e4f8e9;
 }
 .activity-day.near,
 .activity-legend .near {
-  background: #02bd00;
-  border-color: #02bd00;
-  color: #123b28;
+  background: #2f7d4b;
+  border-color: #2f7d4b;
+  color: #e8f8ed;
 }
 .activity-day.partial,
 .activity-legend .partial {
