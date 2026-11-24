@@ -4,8 +4,8 @@
   const content = document.getElementById("content");
   if (!content) return;
   const descriptions = {
-    "Gym strength training": "Log gym exercises, sets, reps, added weight or timed holds. Gym days count once per date toward your gym goal. Home workouts and cardio have their own trackers.",
-    "Strength training": "Set your gym-day target and timeframe. Multiple gym sessions on one date count as one gym day. Home workouts contribute to training records without adding gym days.",
+    "Gym workouts": "Log gym exercises, sets, reps, added weight or timed holds. Gym days count once per date toward your gym goal. Home workouts and cardio have their own trackers.",
+    "Gym days": "Set your gym-day target and timeframe. Multiple gym sessions on one date count as one gym day. Home workouts contribute to training records without adding gym days.",
     "Home workouts": "Bodyweight or weights, before or after the gym, or on another day. Adds to your body training and strength records without counting as a gym day. A quick set counts too: log push-ups, sit-ups, curls, presses and other strength exercises. Keep cardio separate.",
     "Cardio": "Choose a sport or aerobic activity and log minutes plus overall felt intensity. Weekly goal credit combines moderate minutes with twice your high-intensity minutes. Cardio stays separate from strength training.",
     "Food & nutrition": "Log meals and protein in grams. Calories in kcal are optional; leave them blank when unknown. Your AI coach can estimate both from foods and portions, with a preview to approve before saving.",
