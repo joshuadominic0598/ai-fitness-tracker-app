@@ -1,6 +1,5 @@
 """LangGraph planner → bounded tools → response loop, with a draft-only finish."""
 
-import math
 import re
 from typing import TypedDict
 
@@ -65,20 +64,8 @@ def build_graph(coach, system, provider, model, key, budget):
             o.get("tool") == "calculator" and "result" in o for o in state["observations"]
         )
         reply = state["reply"]
-        proposal = reply.get("proposal")
-        if reply.get("action") == "meal" and isinstance(proposal, dict):
-            try:
-                protein = float(proposal["protein"])
-            except (KeyError, ValueError, TypeError):
-                return False  # The normal proposal validator will reject malformed data.
-            verified = any(
-                o.get("tool") == "calculator"
-                and "result" in o
-                and math.isclose(protein, o["result"]["value"], abs_tol=0.05)
-                for o in state["observations"]
-            )
-            if not verified:
-                return True
+        if reply.get("action") in ("meal", "batch"):
+            return False  # Food estimates are uncertain totals, not arithmetic proofs.
         return numeric_question and reply.get("action") != "clarify" and not has_result
 
     def route(state):
@@ -128,7 +115,7 @@ def build_graph(coach, system, provider, model, key, budget):
             observations.append(
                 {
                     "tool": "calculator",
-                    "error": "Verify the arithmetic before answering. A meal draft protein total must equal an observed calculator result. Recalculate from your stated food quantities if assumptions changed; do not calculate mentally.",
+                    "error": "Verify the arithmetic before answering. Use the calculator for explicit arithmetic questions; meal estimates need no calculator verification.",
                 }
             )
         video = state.get("video_data")

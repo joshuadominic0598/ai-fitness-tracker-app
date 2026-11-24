@@ -157,9 +157,8 @@ class ChatEditTests(unittest.TestCase):
                 self.assertNotEqual(result["draft"]["id"], draft["id"])
                 self.assertEqual(self.store.entries(), [])
                 if kind == "meal":
-                    self.assertEqual(
-                        [i["name"] for i in result["draft"]["data"]["items"]], ["Milk"]
-                    )
+                    self.assertEqual(result["draft"]["data"]["description"], "Milk")
+                    self.assertNotIn("items", result["draft"]["data"])
                 if kind in ("workout", "home_workout"):
                     self.assertEqual(len(result["draft"]["data"]["exercises"][0]["sets"]), 1)
                 cached = self.coach.chat(

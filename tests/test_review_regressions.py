@@ -58,7 +58,8 @@ class ReviewRegressionTests(unittest.TestCase):
                 edit_message_id=user,
                 request_id="full-edit-regression",
             )
-        self.assertEqual([i["name"] for i in result["draft"]["data"]["items"]], ["Eggs"])
+        self.assertNotIn("items", result["draft"]["data"])
+        self.assertNotIn("Milk", result["draft"]["data"]["description"])
         pending = {d["id"] for d in self.store.drafts()}
         self.assertIn(unrelated["id"], pending)
         self.assertNotIn(target["id"], pending)

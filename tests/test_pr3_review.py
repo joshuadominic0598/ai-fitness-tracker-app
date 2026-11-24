@@ -326,20 +326,13 @@ class PR3ReviewTests(unittest.TestCase):
         legacy = {"protein": 6, "items": [{"name": "Milk", "portion": "200 ml", "protein": 6}]}
         self.assertIsNone(meal_portion_revision("Change milk to 400ml", legacy))
         for missing in [None, ""]:
-            for field in ["meal", "item"]:
-                meal = {
-                    "date": DAY,
-                    "description": "Milk",
-                    "protein": 6,
-                    "calories": 100,
-                    "items": [{"name": "Milk", "portion": "200 ml", "protein": 6, "calories": 100}],
-                }
-                (meal if field == "meal" else meal["items"][0])["calories"] = missing
-                with (
-                    self.subTest(field=field, missing=missing),
-                    self.assertRaisesRegex(ValueError, "Estimate calories"),
-                ):
-                    require_meal_calories(meal)
+            meal = {"date": DAY, "description": "Milk", "protein": 6, "calories": missing}
+            with (
+                self.subTest(missing=missing),
+                self.assertRaisesRegex(ValueError, "Estimate calories"),
+            ):
+                require_meal_calories(meal)
+        require_meal_calories({"date": DAY, "description": "Milk", "protein": 6, "calories": 100})
         self.assertNotIn(
             "calories",
             validate(

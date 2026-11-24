@@ -106,7 +106,7 @@ def native_tool_schemas():
                         "proposal": {
                             "type": ["object", "null"],
                             "additionalProperties": True,
-                            "description": "The structured journal proposal, as a JSON object. Meal proposals include items:[{name,portion,protein,calories,notes}] for every food/ingredient, plus the total protein and calculation. Prefer this over serialized proposal_json for direct chat.",
+                            "description": "The structured journal proposal, as a JSON object. Meal proposals contain date, a short description, total protein, low/high protein range and total calories in kcal. No per-food calculations. Prefer this over serialized proposal_json for direct chat.",
                         },
                         "proposal_json": {
                             "type": ["string", "null"],

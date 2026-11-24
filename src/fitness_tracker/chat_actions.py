@@ -2,7 +2,6 @@
 
 import re
 from copy import deepcopy
-from decimal import Decimal
 
 
 def meal_portion_revision(message, original):
@@ -135,33 +134,12 @@ def requested_log_kind(message, history=()):
     return "any"
 
 
-def check_meal_calculation(proposal, expression):
-    """Accept exact arithmetic or rounding to the precision of the displayed estimate."""
-    from .agent_tools import calculator
-
-    value = calculator(expression)["value"]
-    protein = float(proposal["protein"])
-    # Estimated totals such as 17.8 g -> 18 g are legitimate rounding, not failed math.
-    precision = max(0, -Decimal(str(protein)).normalize().as_tuple().exponent)
-    if abs(value - protein) > 0.05 and round(value, precision) != protein:
-        raise ValueError("Protein total does not match the breakdown.")
-
-
 def require_meal_calories(proposal):
-    """New AI estimates need both nutrients; older saved meals remain readable."""
-    if not isinstance(proposal, dict):
-        raise ValueError("Prepare a meal object with protein and calories.")
+    """New AI estimates need total kcal; historical item details remain optional."""
+    if not isinstance(proposal, dict) or proposal.get("calories") in (None, ""):
+        raise ValueError("Estimate calories in kcal for the meal total.")
     if proposal.get("confirmed_totals"):
         raise ValueError("Only your manual approval can confirm adjusted meal totals.")
-    items = proposal.get("items", [])
-    if not isinstance(items, list):
-        raise ValueError("Prepare a food item list with protein and calories.")
-    if proposal.get("calories") in (None, "") or any(
-        not isinstance(item, dict) or item.get("calories") in (None, "") for item in items
-    ):
-        raise ValueError(
-            "Estimate calories in kcal for the meal and every food item before preparing the preview."
-        )
 
 
 def draft_summary(draft):
@@ -232,32 +210,20 @@ def draft_message(draft):
         else []
     ) + (
         [f"Meal preview for {draft['data']['date']}"]
-        if draft["kind"] == "meal" and draft["data"].get("items")
+        if draft["kind"] == "meal"
         else [draft_summary(draft)]
     )
     for item in items:
         if item["kind"] == "meal":
             data = item["data"]
-            lines = [
-                f"{index}. {food['name']} ({food['portion']}): ≈{food['protein']:g} g protein"
-                + (f" · ≈{food['calories']:g} kcal" if food.get("calories") is not None else "")
-                + (f" — {food['notes']}" if food.get("notes") else "")
-                for index, food in enumerate(data.get("items", []), 1)
-            ]
-            if lines:
-                lines.append(f"\nTotal: ≈{data['protein']:g} g protein")
-                if data.get("calories") is not None:
-                    lines[-1] += f" · ≈{data['calories']:g} kcal"
-                if "low" in data and "high" in data:
-                    lines.append(f"Estimated range: {data['low']:g}–{data['high']:g} g")
-            if data.get("notes"):
-                lines.append("Assumptions: " + data["notes"])
+            lines = [data["description"], f"**Protein:** ≈{data['protein']:g} g"]
+            if "low" in data and "high" in data:
+                lines[-1] += f" (range {data['low']:g}–{data['high']:g} g)"
+            if data.get("calories") is not None:
+                lines.append(f"**Calories:** ≈{data['calories']:g} kcal")
             if data.get("confirmed_totals"):
-                lines.append(
-                    "Totals adjusted by you. The food breakdown retains the original AI estimates."
-                )
-            if lines:
-                sections.append("\n".join(lines))
+                lines.append("Totals adjusted by you.")
+            sections.append("\n".join(lines))
             continue
         if item["kind"] not in ("workout", "home_workout", "plan"):
             if item["data"].get("notes"):

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fitness_tracker.chat_actions import check_meal_calculation, claims_saved, requested_log_kind
+from fitness_tracker.chat_actions import claims_saved, requested_log_kind
 from fitness_tracker.coach import Coach, Connections
 from fitness_tracker.store import Store
 
@@ -46,7 +46,7 @@ class ProviderActionTests(unittest.TestCase):
                 payload = request.call_args.args[0]
                 self.assertIn("not answer or a prose-only preview", str(payload))
             self.assertEqual(result["draft"]["data"]["protein"], 18)
-            self.assertIn("18 g protein", result["text"])
+            self.assertIn("≈18 g", result["text"])
             self.assertNotIn("Opening Track", result["text"])
             self.assertIn("approve it here", result["text"])
             self.assertEqual(store.entries(), [])
@@ -54,15 +54,7 @@ class ProviderActionTests(unittest.TestCase):
             self.assertIn("18 g protein", result["preview_summary"])
             self.assertEqual(store.messages()[-1]["preview_summary"], result["preview_summary"])
 
-    def test_estimate_rounding_is_valid_but_incorrect_math_is_rejected(self):
-        check_meal_calculation({"protein": 18}, "3+6.5+6.3+2")
-        check_meal_calculation({"protein": 17.8}, "3+6.5+6.3+2")
-        with self.assertRaises(ValueError):
-            check_meal_calculation({"protein": 18}, "3+6")
-        with self.assertRaises(ValueError):
-            check_meal_calculation({"protein": 17.8}, "17.3")
-
-    def test_failed_calculation_never_announces_a_preview_or_redirect(self):
+    def test_obsolete_calculation_does_not_block_a_whole_meal_preview(self):
         for provider in ("ollama",):
             coach, store = self.make_coach(provider)
             reply = {
@@ -80,10 +72,10 @@ class ProviderActionTests(unittest.TestCase):
                 "fitness_tracker.coach.Coach.generate", return_value=self.payload(provider, reply)
             ):
                 result = coach.chat("Log 18g protein from toast", True)
-            self.assertNotIn("draft", result)
-            self.assertEqual(result["action"], "clarify")
-            self.assertIn("couldn't create a valid preview", result["text"])
-            self.assertEqual(store.drafts(), [])
+            self.assertEqual(result["draft"]["data"]["protein"], 18)
+            self.assertEqual(result["action"], "meal")
+            self.assertNotIn("items", result["draft"]["data"])
+            self.assertEqual(len(store.drafts()), 1)
             self.assertEqual(store.entries(), [])
 
     def test_prose_only_preview_is_not_passed_off_as_real(self):

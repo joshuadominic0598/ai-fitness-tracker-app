@@ -73,11 +73,10 @@ class LocalModelTests(unittest.TestCase):
                 )
             generate.assert_not_called()
             revised = result["draft"]["data"]
-            self.assertEqual(revised["items"][0]["protein"], 8.25)
-            self.assertEqual(revised["items"][1]["protein"], 6.3)
+            self.assertNotIn("items", revised)
+            self.assertIn("250 ml", revised["description"])
             self.assertEqual(revised["protein"], 14.55)
             self.assertEqual(revised["calories"], 230)
-            self.assertEqual(revised["items"][1]["calories"], 80)
             self.assertTrue(result["agent"]["source_based_correction"])
             self.assertEqual(len(store.drafts()), 1)
             self.assertEqual(store.entries(), [])
@@ -150,7 +149,7 @@ class LocalModelTests(unittest.TestCase):
         self.assertFalse(payload["think"])
         self.assertEqual(payload["options"]["num_ctx"], 8192)
         self.assertIsInstance(payload["format"], dict)
-        self.assertEqual(result["calculation"], "4+5")
+        self.assertEqual(result["proposal"]["protein"], 9)
         self.assertEqual(usage["input_tokens"], 123)
 
     def test_meal_revision_requires_a_proposal_or_focused_clarification(self):
@@ -160,6 +159,10 @@ class LocalModelTests(unittest.TestCase):
             "proposal": {
                 "date": "2026-11-21",
                 "description": "Dosa and milk",
+                "protein": 18.15,
+                "calories": 400,
+                "low": 15,
+                "high": 22,
                 "items": [
                     {"name": "Dosa", "portion": "3 medium", "calculation": "4.95", "notes": ""},
                     {
@@ -187,8 +190,9 @@ class LocalModelTests(unittest.TestCase):
             )
         schema = request.call_args.args[2]["format"]
         self.assertEqual(schema["properties"]["action"]["enum"], ["meal", "clarify"])
-        self.assertEqual(result["proposal"]["items"][1]["protein"], 13.2)
         self.assertEqual(result["proposal"]["protein"], 18.15)
+        self.assertEqual(result["proposal"]["calories"], 400)
+        self.assertNotIn("items", schema["properties"]["proposal"]["properties"])
 
     def test_agent_tool_decisions_work_without_a_cloud_transport(self):
         decision = {
@@ -208,26 +212,22 @@ class LocalModelTests(unittest.TestCase):
             cloud.assert_not_called()
             self.assertEqual(result["tool_calls"], decision["tool_calls"])
 
-    def test_meal_item_expressions_and_total_are_calculated_locally(self):
+    def test_meal_totals_do_not_require_expression_evaluation(self):
         data = {
             "action": "meal",
-            "message": "Review.",
+            "message": "Review",
             "proposal": {
-                "protein": 999,
-                "low": 900,
-                "high": 1000,
-                "items": [
-                    {
-                        "name": "Food A",
-                        "portion": "150 g",
-                        "protein": 99,
-                        "calculation": "150/100*4",
-                    },
-                    {"name": "Food B", "portion": "1 piece", "protein": 4, "calculation": "4"},
-                ],
+                "date": "2026-11-23",
+                "description": "A filling mixed meal.",
+                "protein": 50,
+                "low": 35,
+                "high": 70,
+                "calories": 1200,
             },
         }
-        with patch("fitness_tracker.local_model.request", side_effect=[INFO, reply(data)]):
+        with patch(
+            "fitness_tracker.local_model.request", side_effect=[INFO, reply(data)]
+        ) as request:
             result, _ = generate(
                 [
                     {"role": "system", "content": "Meal: estimate"},
@@ -237,12 +237,11 @@ class LocalModelTests(unittest.TestCase):
                 {},
                 5000,
                 direct=True,
+                response_kind="meal",
             )
-        self.assertEqual(result["proposal"]["items"][0]["protein"], 6)
-        self.assertEqual(result["proposal"]["protein"], 10)
-        self.assertEqual(result["calculation"], "6.0+4.0")
+        self.assertEqual(result["proposal"], data["proposal"])
         self.assertNotIn(
-            "low", result["proposal"], "an inconsistent model range is never displayed"
+            "items", request.call_args.args[2]["format"]["properties"]["proposal"]["properties"]
         )
 
     def test_assessment_schema_requires_requested_categories_and_formats_points(self):

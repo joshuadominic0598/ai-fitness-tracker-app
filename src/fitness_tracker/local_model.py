@@ -140,47 +140,26 @@ def response_schema(workout=False, direct=False, meal=False):
         return {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["meal", "clarify", "answer"]},
+                "action": {"type": "string", "enum": ["meal", "clarify"]},
                 "message": {"type": "string"},
                 "proposal": {
                     "type": ["object", "null"],
                     "properties": {
                         "date": {"type": "string"},
                         "description": {"type": "string"},
-                        "notes": {"type": "string"},
-                        "low": {"type": "number"},
-                        "high": {"type": "number"},
-                        "items": {
-                            "type": "array",
-                            "minItems": 1,
-                            "maxItems": 50,
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {"type": "string"},
-                                    "portion": {"type": "string"},
-                                    "calculation": {"type": "string"},
-                                    "calorie_calculation": {"type": "string"},
-                                    "notes": {"type": "string"},
-                                },
-                                "required": [
-                                    "name",
-                                    "portion",
-                                    "calculation",
-                                    "calorie_calculation",
-                                    "notes",
-                                ],
-                                "additionalProperties": False,
-                            },
-                        },
+                        "protein": {"type": "number", "minimum": 0, "maximum": 500},
+                        "low": {"type": "number", "minimum": 0, "maximum": 500},
+                        "high": {"type": "number", "minimum": 0, "maximum": 500},
+                        "calories": {"type": "number", "minimum": 0, "maximum": 10000},
                     },
-                    "required": ["date", "description", "items"],
+                    "required": ["date", "description", "protein", "low", "high", "calories"],
                     "additionalProperties": False,
                 },
             },
             "required": ["action", "message", "proposal"],
             "additionalProperties": False,
         }
+
     return {
         "type": "object",
         "properties": {
@@ -228,7 +207,6 @@ def response_schema(workout=False, direct=False, meal=False):
 
 
 def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, progress=None):
-    from .agent_tools import calculator
     from .prompt_budget import input_tokens
 
     deadline = time.monotonic() + min(120, max(1, float(cfg.get("turn_timeout", 120))))
@@ -239,22 +217,10 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
         and ("Meal:" in message["content"] or "Meal proposal:" in message["content"])
         for message in messages
     )
-    if meal_task:
-        messages[0]["content"] += (
-            "\nLOCAL MEAL FORMAT: Estimate calories independently from protein, including cooking oils, sauces and drinks. For each food item include calorie_calculation, a numeric expression for its calories in kcal using stated portions and product labels when available. Never derive total calories just from protein grams. Scale BOTH expressions to the entire stated portion, including counts: for 2 eggs multiply each per-egg nutrient value by 2; for 200 g multiply each per-100-g value by 2. Keep the full quantity in the portion field. The app evaluates and sums both nutrients. For each estimated food item include calculation, a numeric expression for that portion's protein (e.g. 150/100*3.3 for 150ml ordinary milk). The app evaluates these expressions and sums item protein locally; do not rely on mental arithmetic. On corrections, preserve untouched items and their protein values; a copied item can use its previous protein as a numeric literal calculation. Use supplied product labels and user-confirmed values first. Fallback reference assumptions only: ordinary dairy milk about 3.3g protein/100ml (8g per 240ml cup); cheddar-like cheese about 25g/100g (7g per 28g); a large whole egg about 6.3g. Special/high-protein milk and different cheeses vary: label your assumption. Never treat food weight as protein weight. Do not invent a label or say these cached references were just looked up."
-        )
-        if response_kind in ("meal", "meal_revision"):
-            messages[0]["content"] += (
-                "\nFor this local meal schema, return ALL the foods as items with name, portion, calculation, calorie_calculation and assumption notes. Do not stop after the first food. Omit numeric protein and calorie fields: the app computes both nutrients from each expression and the totals itself. On a portion-only correction, copy every unchanged item and its previous protein and calories as literal calculation and calorie_calculation; do not drop or re-estimate it."
-            )
-        if response_kind == "meal_revision":
-            messages[0]["content"] += (
-                "\nREVISING A PENDING MEAL: Return action meal with the updated proposal, not an answer "
-                "claiming an edit. Keep every original food and its protein calculation unless the user "
-                "changed it. Include requested additions with the full quantity. If the user asks for "
-                "the lower range, use conservative item estimates consistently, set low to their sum "
-                "and retain a realistic high. Use clarify only for essential missing information."
-            )
+    if meal_task or response_kind in ("meal", "meal_revision"):
+        from .meal_estimate import MEAL_GUIDANCE
+
+        messages[0]["content"] += "\n" + MEAL_GUIDANCE
     base = local_url(cfg.get("ollama_url", DEFAULT_URL))
     info = request(
         base, "/api/show", {"model": model}, timeout=max(0.1, min(3, deadline - time.monotonic()))
@@ -409,40 +375,6 @@ def generate(messages, model, cfg, budget, *, direct=False, response_kind=None, 
                 )
             ]
         )
-    proposal = reply.get("proposal")
-
-    def meal_total(data):
-        items = data.get("items")
-        if not isinstance(items, list) or not items:
-            return None
-        for item in items:
-            if not isinstance(item, dict):
-                raise ValueError("The local meal breakdown needs a food object for each item.")
-            if item.get("calculation"):
-                item["protein"] = round(calculator(item["calculation"])["value"], 2)
-            if item.get("calorie_calculation"):
-                item["calories"] = round(calculator(item["calorie_calculation"])["value"], 2)
-        values = [float(item["protein"]) for item in items]
-        total = round(sum(values), 2)
-        data["protein"] = total
-        if all(item.get("calories") is not None for item in items):
-            data["calories"] = round(sum(float(item["calories"]) for item in items), 2)
-        # Do not display a model-produced range that excludes the computed sum.
-        if not float(data.get("low", total)) <= total <= float(data.get("high", total)):
-            data.pop("low", None)
-            data.pop("high", None)
-        data.pop("calculation", None)
-        return "+".join(str(value) for value in values)
-
-    if isinstance(proposal, dict) and reply.get("action") == "meal":
-        expression = proposal.pop("calculation", reply.get("calculation"))
-        reply["calculation"] = meal_total(proposal) or expression
-    elif isinstance(proposal, dict) and reply.get("action") == "batch":
-        for entry in proposal.get("entries", []):
-            if entry.get("kind") == "meal":
-                expression = meal_total(entry["data"])
-                if expression:
-                    entry["calculation"] = expression
     usage = {
         "input_tokens": actual,
         "output_tokens": result.get("eval_count", 0),

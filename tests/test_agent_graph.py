@@ -165,7 +165,7 @@ class AgentGraphTests(unittest.TestCase):
             )
         self.assertLessEqual(input_tokens(messages, "qwen3:8b"), 5000)
 
-    def test_meal_draft_must_match_calculator_result(self):
+    def test_uncertain_meal_total_need_not_match_a_calculator_observation(self):
         reply = {
             "action": "meal",
             "message": "Estimate",
@@ -193,8 +193,8 @@ class AgentGraphTests(unittest.TestCase):
         self.store.reset()
         with patch.object(self.coach, "generate", side_effect=[calc("12+16"), reply, reply, reply]):
             result = self.coach.chat("Prepare a food draft", True, research_mode=True)
-        self.assertNotIn("draft", result)
-        self.assertEqual(self.store.drafts(), [])
+        self.assertEqual(result["draft"]["data"]["protein"], 20)
+        self.assertEqual(self.store.entries(), [])
 
     def test_math_question_cannot_bypass_calculator(self):
         with (

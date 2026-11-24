@@ -1,4 +1,3 @@
-import copy
 import tempfile
 import unittest
 from pathlib import Path
@@ -73,15 +72,14 @@ class MealBreakdownTests(unittest.TestCase):
             self.assertEqual(model.call_args.kwargs["response_kind"], "meal_revision")
             revised = result["draft"]["data"]
             self.assertEqual(revised["date"], meal()["date"])
-            self.assertEqual(revised["items"][:3], original["data"]["items"])
-            self.assertEqual(revised["protein"], revised["low"])
-            self.assertEqual(revised["protein"], 28.2)
-            self.assertIn("400 ml", result["text"])
+            self.assertNotIn("items", revised)
+            self.assertLess(revised["low"], revised["protein"])
+            self.assertLess(revised["protein"], revised["high"])
             self.assertNotIn("14.2", result["text"])
             self.assertEqual(len(store.drafts()), 1)
             self.assertEqual(store.entries(), [])
             coach.chat("I approve", True)
-            self.assertEqual(store.entries()[0]["items"], revised["items"])
+            self.assertEqual(store.entries()[0]["protein"], revised["protein"])
 
     def test_unsuccessful_revision_never_claims_the_old_preview_was_updated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -182,51 +180,37 @@ class MealBreakdownTests(unittest.TestCase):
         self.assertEqual(result["low"], 26.2)
         self.assertEqual(result["high"], 30.2)
 
-    def test_qwen_prints_persists_and_revises_each_item_before_approval(self):
-        for provider in ("ollama",):
-            with self.subTest(provider=provider), tempfile.TemporaryDirectory() as tmp:
-                store = Store(tmp)
-                connections = Connections(Path(tmp))
-                connections.save({"provider": provider, provider + "_key": "synthetic"})
-                coach = Coach(store, connections)
-
-                def payload(data, calculation):
-                    return {
-                        "action": "meal",
-                        "message": "Review",
-                        "proposal": data,
-                        "calculation": calculation,
-                    }
-
-                with patch(
-                    "fitness_tracker.coach.Coach.generate", return_value=payload(meal(), "4+5+6")
-                ) as request:
-                    result = coach.chat("Log my meal for 2026-02-01", True, "2026-02-01")
-                self.assertIn(
-                    "items:[{name,portion,protein,calories,notes}]", str(request.call_args.args[0])
-                )
-                for food in meal()["items"]:
-                    self.assertIn(
-                        f"{food['name']} ({food['portion']}): ≈{food['protein']} g protein",
-                        result["text"],
-                    )
-                self.assertIn("Total: ≈15 g protein", result["text"])
-                self.assertIn("Assumed type.", result["text"])
-                self.assertEqual(store.entries(), [])
-                changed = copy.deepcopy(meal())
-                changed.update(protein=18, low=16, high=20)
-                changed["items"][2]["protein"] = 9
-                with patch(
-                    "fitness_tracker.coach.Coach.generate", return_value=payload(changed, "4+5+9")
-                ):
-                    revision = coach.chat("Change the topping estimate to 9g protein", True)
-                self.assertEqual(len(store.drafts()), 1)
-                self.assertEqual(
-                    revision["draft"]["data"]["items"][:2], result["draft"]["data"]["items"][:2]
-                )
-                self.assertIn("Total: ≈18 g protein", revision["text"])
-                saved = store.approve(revision["draft"]["id"])
-                self.assertEqual(saved["items"], revision["draft"]["data"]["items"])
+    def test_qwen_revises_whole_meal_totals_before_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(tmp)
+            coach = Coach(store, Connections(Path(tmp)))
+            with patch.object(
+                coach,
+                "generate",
+                return_value={"action": "meal", "message": "Review", "proposal": meal()},
+            ):
+                result = coach.chat("Log my meal", True, "2026-02-01")
+            self.assertNotIn("items", result["draft"]["data"])
+            self.assertNotIn("1.", result["text"])
+            changed = {
+                "date": "2026-02-01",
+                "description": "The meal with extra topping.",
+                "protein": 18,
+                "low": 16,
+                "high": 20,
+                "calories": 350,
+            }
+            with patch.object(
+                coach,
+                "generate",
+                return_value={"action": "meal", "message": "Review", "proposal": changed},
+            ):
+                revision = coach.chat("Change the meal to include extra topping", True)
+            self.assertEqual(len(store.drafts()), 1)
+            self.assertEqual(revision["draft"]["data"]["protein"], 18)
+            self.assertEqual(store.entries(), [])
+            saved = store.approve(revision["draft"]["id"])
+            self.assertEqual(saved["calories"], 350)
 
     def test_inconsistent_or_malformed_item_breakdown_is_rejected(self):
         data = meal()
@@ -245,6 +229,5 @@ class MealBreakdownTests(unittest.TestCase):
         legacy.pop("items")
         clean = validate("meal", legacy)
         self.assertNotIn("items", clean)
-        self.assertIn(
-            "Synthetic portion assumptions.", draft_message({"kind": "meal", "data": clean})
-        )
+        self.assertIn("Food A, Food B and topping", draft_message({"kind": "meal", "data": clean}))
+        self.assertEqual(clean["notes"], "Synthetic portion assumptions.")

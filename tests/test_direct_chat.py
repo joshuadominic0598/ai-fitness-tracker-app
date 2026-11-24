@@ -36,7 +36,7 @@ class DirectChatTests(unittest.TestCase):
         self.assertEqual(reply["papers"], [])
         self.assertEqual(self.store.entries(), [])
 
-    def test_meal_proposal_uses_local_math_and_still_requires_approval(self):
+    def test_meal_proposal_uses_estimated_totals_and_still_requires_approval(self):
         proposal = {
             "action": "meal",
             "message": "Review this 14 g estimate.",
@@ -56,8 +56,9 @@ class DirectChatTests(unittest.TestCase):
         self.store.reset()
         with patch.object(self.coach, "generate", return_value={**proposal, "calculation": "1+2"}):
             reply = self.coach.chat("Log my meal", True)
-        self.assertNotIn("draft", reply)
-        self.assertEqual(self.store.drafts(), [])
+        self.assertEqual(reply["draft"]["data"]["protein"], 14)
+        self.assertEqual(len(self.store.drafts()), 1)
+        self.assertEqual(self.store.entries(), [])
 
     def test_failed_direct_request_is_not_automatically_retried(self):
         with patch.object(

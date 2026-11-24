@@ -140,7 +140,7 @@ class CardioAndCaloriesTests(unittest.TestCase):
         self.assertNotIn("draft", result)
         self.assertIn("calories", " ".join(result["notices"]))
 
-    def test_local_model_computes_protein_and_calories_from_separate_expressions(self):
+    def test_local_model_accepts_independent_protein_and_calorie_totals(self):
         import json
 
         data = {
@@ -149,22 +149,10 @@ class CardioAndCaloriesTests(unittest.TestCase):
             "proposal": {
                 "date": DAY,
                 "description": "Synthetic foods",
-                "items": [
-                    {
-                        "name": "Food A",
-                        "portion": "2 portions",
-                        "calculation": "2*10",
-                        "calorie_calculation": "2*150",
-                        "notes": "Assumed portions",
-                    },
-                    {
-                        "name": "Food B",
-                        "portion": "1 portion",
-                        "calculation": "5",
-                        "calorie_calculation": "100",
-                        "notes": "Label",
-                    },
-                ],
+                "protein": 25,
+                "calories": 400,
+                "low": 20,
+                "high": 30,
             },
         }
         response = {
@@ -183,8 +171,7 @@ class CardioAndCaloriesTests(unittest.TestCase):
             )
         self.assertEqual(result["proposal"]["protein"], 25)
         self.assertEqual(result["proposal"]["calories"], 400)
-        self.assertEqual(validate("meal", result["proposal"])["items"][0]["calories"], 300)
-        item_schema = response_schema(meal=True)["properties"]["proposal"]["properties"]["items"][
-            "items"
-        ]
-        self.assertIn("calorie_calculation", item_schema["required"])
+        self.assertEqual(validate("meal", result["proposal"])["calories"], 400)
+        meal_schema = response_schema(meal=True)["properties"]["proposal"]
+        self.assertIn("calories", meal_schema["required"])
+        self.assertNotIn("items", meal_schema["properties"])
